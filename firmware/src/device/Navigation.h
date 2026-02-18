@@ -1,0 +1,73 @@
+//
+// Created by L Shaf on 2026-02-18.
+//
+
+#pragma once
+#include <Arduino.h>
+
+class Navigation
+{
+public:
+  enum Direction_t
+  {
+    DIR_NONE,
+    DIR_UP,
+    DIR_DOWN,
+    DIR_LEFT,
+    DIR_RIGHT,
+    DIR_PRESS
+  };
+
+  ~Navigation() = default;
+  void update();
+
+  bool isPressed() const { return _pressed; }
+
+  bool wasPressed() {
+    if (_wasPressed) {
+      _wasPressed = false;
+      return true;
+    }
+    return false;
+  }
+
+  Direction_t readDirection() {
+    Direction_t dir = _releasedDirection;
+    _releasedDirection = DIR_NONE;
+    return dir;
+  }
+
+  uint32_t pressDuration() const { return _pressDuration; }
+
+protected:
+  void updateState(Direction_t currentlyHeld) {
+    uint32_t now = millis();
+
+    if (currentlyHeld != DIR_NONE) {
+      if (!_pressed) {
+        _pressed = true;
+        _pressStart = now;
+      }
+      _currDirection = currentlyHeld;
+
+    } else {
+      if (_pressed) {
+        _wasPressed = true;
+        _releasedDirection = _currDirection;
+        _pressDuration = now - _pressStart;
+        _pressed = false;
+        _currDirection = DIR_NONE;
+      }
+    }
+  }
+
+private:
+  Direction_t _currDirection    = DIR_NONE;
+  Direction_t _releasedDirection = DIR_NONE;
+
+  bool     _pressed   = false;
+  bool     _wasPressed = false;
+
+  uint32_t _pressStart   = 0;
+  uint32_t _pressDuration = 0;
+};

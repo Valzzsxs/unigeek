@@ -4,6 +4,9 @@
 
 #pragma once
 
+#define PIN_BTN_DOWN 39
+#define PIN_BTN_SEL 37
+
 #define GROVE_SDA 32
 #define GROVE_SCL 33
 static const uint8_t SDA = GROVE_SDA;

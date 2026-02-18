@@ -79,4 +79,5 @@ class AXP192 {
     void ReadBuff(uint8_t Addr, uint8_t Size, uint8_t *Buff);
 };
 
+extern AXP192 axpInstance;
 #endif
