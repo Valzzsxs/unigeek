@@ -1,6 +1,5 @@
 #include "AXP192.h"
 
-AXP192 axpInstance;
 AXP192::AXP192() {}
 
 void AXP192::begin(void) {

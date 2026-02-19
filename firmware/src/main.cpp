@@ -9,29 +9,29 @@ void setup() {
   delay(500);
   Serial.println("Starting...");
 
-  Device.begin();
+  Uni.begin();
 
-  Device.Lcd.setRotation(3);
-  Device.Lcd.fillScreen(TFT_BLACK);
-  Device.Lcd.setTextDatum(TC_DATUM);
-  Device.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
+  Uni.Lcd.setRotation(3);
+  Uni.Lcd.fillScreen(TFT_BLACK);
+  Uni.Lcd.setTextDatum(TC_DATUM);
+  Uni.Lcd.setTextColor(TFT_WHITE, TFT_BLACK);
   Serial.println("Fill done");
 }
 
 void loop() {
-  Device.update();
-  if (Device.Nav.wasPressed())
+  Uni.update();
+  if (Uni.Nav.wasPressed())
   {
-    switch (Device.Nav.readDirection())
+    switch (Uni.Nav.readDirection())
     {
-      case Navigation::DIR_UP:
-        Device.Lcd.drawString(" UP ", Device.Lcd.width() / 2, 2);
+      case INavigation::DIR_UP:
+        Uni.Lcd.drawString(" UP ", Uni.Lcd.width() / 2, 2);
         break;
-      case Navigation::DIR_DOWN:
-        Device.Lcd.drawString(" DW ", Device.Lcd.width() / 2, 2);
+      case INavigation::DIR_DOWN:
+        Uni.Lcd.drawString(" DW ", Uni.Lcd.width() / 2, 2);
         break;
-      case Navigation::DIR_PRESS:
-        Device.Lcd.drawString(" SL ", Device.Lcd.width() / 2, 2);
+      case INavigation::DIR_PRESS:
+        Uni.Lcd.drawString(" SL ", Uni.Lcd.width() / 2, 2);
         break;
       default:
         Serial.println("NONE");

@@ -1,0 +1,14 @@
+//
+// Created by L Shaf on 2026-02-19.
+//
+
+#pragma once
+
+class IPower
+{
+public:
+  virtual ~IPower() = default;
+  virtual void begin() = 0;
+  virtual int getBatteryPercentage() = 0;
+  virtual void powerOff() = 0;
+};

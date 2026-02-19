@@ -3,34 +3,17 @@
 //
 
 #include "device/Device.h"
+#include "Navigation.h"
+#include "Display.h"
+#include "Power.h"
 #include <AXP192.h>
 
-CDevice Device;
-void CDevice::begin()
-{
-  axpInstance.begin();
-  Lcd.begin();
-  Lcd.setRotation(0);
-  Lcd.invertDisplay(true);
-  setBrightness(100);
+AXP192 axp;
 
-  pinMode(PIN_BTN_SEL, INPUT);
-  pinMode(PIN_BTN_DOWN, INPUT);
-}
+static DisplayImpl display(&axp);
+static NavigationImpl navigation(&axp);
+static PowerImpl power(&axp);
 
-void CDevice::setBrightness(uint8_t brightness)
-{
-  if (brightness > 100) brightness = 100;
-  if (brightness < 5) brightness = 5;
-  axpInstance.ScreenBreath(brightness);
-}
-
-void CDevice::powerOff()
-{
-  axpInstance.PowerOff();
-}
-
-void CDevice::update()
-{
-  Nav.update();
+Device* Device::createInstance() {
+  return new Device(display, power, navigation);
 }

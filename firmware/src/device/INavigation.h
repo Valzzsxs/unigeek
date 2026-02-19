@@ -5,7 +5,7 @@
 #pragma once
 #include <Arduino.h>
 
-class Navigation
+class INavigation
 {
 public:
   enum Direction_t
@@ -18,8 +18,9 @@ public:
     DIR_PRESS
   };
 
-  ~Navigation() = default;
-  void update();
+  virtual ~INavigation() = default;
+  virtual void update() = 0;
+  virtual void begin() = 0;
 
   bool isPressed() const { return _pressed; }
 
