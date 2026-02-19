@@ -25,17 +25,25 @@ public:
     Lcd.invertDisplay(true);
 
     Power.begin();
-    Nav.begin();
+    Nav->begin();
+
+    if (Keyboard) Keyboard->begin();
   }
 
   void update()
   {
-    Nav.update();
+    Nav->update();
   }
 
-  INavigation& Nav;
+  void switchNavigation(INavigation* newNav)
+  {
+    Nav = newNav;
+    Nav->begin();
+  }
+
   IDisplay& Lcd;
   IPower& Power;
+  INavigation* Nav;
   IKeyboard*   Keyboard = nullptr;
 
   // Prevent copying
@@ -43,7 +51,7 @@ public:
   Device& operator=(const Device&) = delete;
 private:
   // Private constructor — takes concrete implementations
-  Device(IDisplay& lcd, IPower& power, INavigation& nav, IKeyboard* keyboard = nullptr)
+  Device(IDisplay& lcd, IPower& power, INavigation* nav, IKeyboard* keyboard = nullptr)
       : Lcd(lcd), Power(power), Nav(nav), Keyboard(keyboard) {}
 
   // Returns a heap-allocated instance — defined in Device.cpp

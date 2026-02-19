@@ -15,5 +15,5 @@ static NavigationImpl navigation(&axp);
 static PowerImpl power(&axp);
 
 Device* Device::createInstance() {
-  return new Device(display, power, navigation);
+  return new Device(display, power, &navigation);
 }

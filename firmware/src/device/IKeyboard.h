@@ -4,4 +4,9 @@
 
 #pragma once
 
-class IKeyboard {};
+class IKeyboard
+{
+public:
+  virtual ~IKeyboard() = default;
+  virtual void begin() = 0;
+};
