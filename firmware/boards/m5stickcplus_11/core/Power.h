@@ -4,7 +4,7 @@
 
 #pragma once
 #include "AXP192.h"
-#include "device/IPower.h"
+#include "core/IPower.h"
 
 class PowerImpl : public IPower
 {
@@ -14,10 +14,10 @@ public:
   {
     _axp->begin();
   }
-  int getBatteryPercentage() override
+  uint8_t getBatteryPercentage() override
   {
-    float b = _axp->GetBatVoltage();
-    const int percent = static_cast<int>((b - 3.0) / 1.2) * 100;
+    const float b = _axp->GetBatVoltage();
+    const uint8_t percent = static_cast<uint8_t>((b - 3.0) / 1.2) * 100;
     return (percent < 0) ? 1 : (percent >= 100) ? 100 : percent;
 
   }

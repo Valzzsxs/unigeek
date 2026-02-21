@@ -2,7 +2,9 @@
 // Created by L Shaf on 2026-02-19.
 //
 
-#include "device/INavigation.h"
+#pragma once
+
+#include "core/INavigation.h"
 #include <AXP192.h>
 
 class NavigationImpl : public INavigation

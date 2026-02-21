@@ -48,6 +48,7 @@ static const uint8_t SCL = GROVE_SCL;
 #define TFT_RST     LCD_RST
 #define TFT_BL      LCD_BL
 #define TFT_INVERSION_ON
+#define TFT_DEFAULT_ORIENTATION 3
 #define USE_HSPI_PORT
 #define TOUCH_CS    -1
 #define SMOOTH_FONT

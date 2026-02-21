@@ -2,7 +2,7 @@
 // Created by L Shaf on 2026-02-16.
 //
 
-#include "device/Device.h"
+#include "core/Device.h"
 #include "Navigation.h"
 #include "Display.h"
 #include "Power.h"

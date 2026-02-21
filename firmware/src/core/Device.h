@@ -9,6 +9,10 @@
 #include "IPower.h"
 #include "IKeyboard.h"
 
+#ifndef TFT_DEFAULT_ORIENTATION
+#define TFT_DEFAULT_ORIENTATION 1
+#endif
+
 class Device
 {
 public:
@@ -21,7 +25,7 @@ public:
   {
     Lcd.begin();
     Lcd.setBrightness(100);
-    Lcd.setRotation(0);
+    Lcd.setRotation(TFT_DEFAULT_ORIENTATION);
     Lcd.invertDisplay(true);
 
     Power.begin();

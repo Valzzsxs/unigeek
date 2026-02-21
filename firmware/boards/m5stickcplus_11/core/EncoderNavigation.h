@@ -4,7 +4,7 @@
 
 #pragma once
 
-#include "device/INavigation.h"
+#include "core/INavigation.h"
 #include "M5HatMiniEncoderC.h"
 
 M5HatMiniEncoderC encoder;
