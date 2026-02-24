@@ -7,7 +7,7 @@ class MainMenuScreen : public ListScreen
   const char* title() override { return "Main Menu"; }
 
   // list items
-  ListItem _items[9] = {
+  ListItem _items[10] = {
     {"Brightness", "Adjust display"},
     {"LoRa Freq", "915 MHz"},
     {"Navigation", "Built-in"},
@@ -17,6 +17,7 @@ class MainMenuScreen : public ListScreen
     {"Brightness", "Adjust display"},
     {"LoRa Freq", "915 MHz"},
     {"Navigation", "Built-in"},
+    {"Power Off"}
   };
 
   void onInit() override
@@ -26,6 +27,10 @@ class MainMenuScreen : public ListScreen
   }
 
   void onItemSelected(uint8_t index) override {
-    // do nothing for now
+    if (index == 9)
+    {
+      Serial.println("Power off called");
+      Uni.Power.powerOff();
+    }
   }
 };
