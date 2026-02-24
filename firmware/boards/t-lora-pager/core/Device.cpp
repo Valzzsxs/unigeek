@@ -17,6 +17,17 @@ void Device::setupIo()
 {
   pinMode(LCD_BL, OUTPUT);
   digitalWrite(LCD_BL, HIGH);
+
+  const uint8_t share_spi_bus_devices_cs_pins[] = {
+    NFC_CS,
+    LORA_CS,
+    SD_CS,
+    LORA_RST,
+};
+  for (auto pin : share_spi_bus_devices_cs_pins) {
+    pinMode(pin, OUTPUT);
+    digitalWrite(pin, HIGH);
+  }
 }
 
 Device* Device::createInstance() {

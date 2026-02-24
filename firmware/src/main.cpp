@@ -12,11 +12,20 @@ static MainMenuScreen mainMenuScreen;
 void setup() {
   Serial.begin(115200);
   Uni.begin();
-  Uni.Lcd.setFreeFont();
   Screen.setScreen(&mainMenuScreen);
 }
 
 void loop() {
   Uni.update();
   Screen.update();
+  if (Uni.Keyboard != nullptr)
+  {
+    if (Uni.Keyboard->available())
+    {
+      const auto key = Uni.Keyboard->getKey();
+      Serial.println("Keyboard key " + String(key) + " pressed");
+      Uni.Lcd.setTextColor(TFT_WHITE, TFT_RED);
+      Uni.Lcd.drawString(&key, 100, 80);
+    }
+  }
 }

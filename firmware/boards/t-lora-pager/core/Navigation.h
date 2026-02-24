@@ -5,24 +5,21 @@
 #pragma once
 
 #include "core/INavigation.h"
+#include "pins_arduino.h"
+#include <RotaryEncoder.h>
+
+#define ROTARY_A  ENCODER_A
+#define ROTARY_B  ENCODER_B
+#define ROTARY_C  ENCODER_BTN
 
 class NavigationImpl : public INavigation
 {
 public:
-  void begin() override {
-    pinMode(ENCODER_A,   INPUT_PULLUP);
-    pinMode(ENCODER_B,   INPUT_PULLUP);
-    pinMode(ENCODER_BTN, INPUT_PULLUP);
-  }
+  void begin() override;
+  void update() override;
 
-  void update() override {
-    bool a   = digitalRead(ENCODER_A)   == LOW;
-    bool b   = digitalRead(ENCODER_B)   == LOW;
-    bool btn = digitalRead(ENCODER_BTN) == LOW;
-
-    if (btn)     updateState(DIR_PRESS);
-    else if (a && !b) updateState(DIR_UP);
-    else if (b && !a) updateState(DIR_DOWN);
-    else         updateState(DIR_NONE);
-  }
+private:
+  RotaryEncoder* _encoder = nullptr;
+  int            _lastPos = 0;
+  int            _posDiff = 0;
 };

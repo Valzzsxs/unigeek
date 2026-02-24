@@ -38,6 +38,7 @@ static const uint8_t SCL = GROVE_SCL;
 // ─── TFT_eSPI config (USER_SETUP_LOADED in platformio.ini) ─
 #define DISABLE_ALL_LIBRARY_WARNINGS 1
 #define USER_SETUP_LOADED 1
+
 #define ST7789_DRIVER
 #define TFT_WIDTH   135
 #define TFT_HEIGHT  240
@@ -52,12 +53,5 @@ static const uint8_t SCL = GROVE_SCL;
 #define USE_HSPI_PORT
 #define TOUCH_CS    -1
 #define SMOOTH_FONT
-#define LOAD_GLCD
-#define LOAD_FONT2
-#define LOAD_FONT4
-#define LOAD_FONT6
-#define LOAD_FONT7
-#define LOAD_FONT8
-#define LOAD_GFXFF
 #define SPI_FREQUENCY       20000000
 #define SPI_READ_FREQUENCY   5000000

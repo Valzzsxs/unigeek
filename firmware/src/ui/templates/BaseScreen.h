@@ -43,7 +43,8 @@ protected:
     return {
       Uni.Power.getBatteryPercentage(),
       WiFi.isConnected(),
-      false
+      false,
+      Uni.Power.isCharging()
     };
   }
 

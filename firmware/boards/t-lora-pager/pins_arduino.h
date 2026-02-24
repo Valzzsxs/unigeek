@@ -16,7 +16,7 @@ static const uint8_t MOSI = SPI_MOSI_PIN;
 static const uint8_t MISO = SPI_MISO_PIN;
 static const uint8_t SCK  = SPI_SCK_PIN;
 
-// ─── I2C ──────────────────────────────────────────────────
+// ─── I2C (shared by keyboard, RTC, sensor, audio, touch) ──
 #define GROVE_SDA  3
 #define GROVE_SCL  2
 
@@ -28,52 +28,60 @@ static const uint8_t SCL = GROVE_SCL;
 #define LCD_DC  37
 #define LCD_BL  42
 
-// ─── Keyboard ─────────────────────────────────────────────
-#define KB_I2C_ADDRESS  0x34
-#define KB_BL           46
+// ─── SD Card ──────────────────────────────────────────────
+#define SD_CS  21
 
-// ─── Encoder ──────────────────────────────────────────────
+// ─── Keyboard (TCA8418) ───────────────────────────────────
+#define KB_INT  6
+#define KB_BL   46
+
+// ─── Rotary Encoder ───────────────────────────────────────
 #define ENCODER_A    40
 #define ENCODER_B    41
 #define ENCODER_BTN   7
 
-// ─── LoRa ─────────────────────────────────────────────────
+// ─── RTC (PCF85063A) ──────────────────────────────────────
+#define RTC_INT  1
+
+// ─── NFC (ST25R3916) ──────────────────────────────────────
+#define NFC_CS   39
+#define NFC_INT   5
+
+// ─── AI Sensor (BHI260AP) ─────────────────────────────────
+#define SENSOR_INT  8
+
+// ─── LoRa (SX1262) ────────────────────────────────────────
 #define LORA_CS    36
 #define LORA_RST   47
 #define LORA_IRQ   14
 #define LORA_BUSY  48
 
-// ─── GPS ──────────────────────────────────────────────────
+// ─── GPS (MIA-M10Q) ───────────────────────────────────────
 #define GPS_TX   12
 #define GPS_RX    4
 #define GPS_PPS  13
 
-// ─── SD Card ──────────────────────────────────────────────
-#define SDCARD_CS  21
+// ─── Audio Codec (ES8311) ─────────────────────────────────
+#define AUDIO_WS    18
+#define AUDIO_SCK   11
+#define AUDIO_MCLK  10
+#define AUDIO_DOUT  45
+#define AUDIO_DIN   17
 
-// ─── NFC ──────────────────────────────────────────────────
-#define NFC_CS   39
-#define NFC_INT   5
+// ─── UART (external 12-pin socket) ────────────────────────
+#define UART1_TX  43
+#define UART1_RX  44
 
-// ─── Audio ────────────────────────────────────────────────
-#define AUDIO_I2S_WS    18
-#define AUDIO_I2S_SCK   11
-#define AUDIO_I2S_MCLK  10
-#define AUDIO_I2S_SDOUT 45
-#define AUDIO_I2S_SDIN  17
+// ─── Custom free pin (external 12-pin socket) ─────────────
+#define CUSTOM_PIN  9
 
-// ─── Encoder extra ────────────────────────────────────────
-#define ENCODER_KEY  7   // same as ENCODER_BTN alias
+// ─── Boot button ──────────────────────────────────────────
+#define BTN_BOOT  0
 
-// ─── RTC ──────────────────────────────────────────────────
-#define RTC_INT  1
-
-// ─── Buttons ──────────────────────────────────────────────
-#define BTN_BOOT  0   // BOOT button doubles as wakeup
-
-// ─── TFT_eSPI config (USER_SETUP_LOADED in platformio.ini) ─
+// ─── TFT_eSPI config ──────────────────────────────────────
 #define DISABLE_ALL_LIBRARY_WARNINGS 1
 #define USER_SETUP_LOADED 1
+
 #define ST7796_DRIVER
 #define TFT_WIDTH   222
 #define TFT_HEIGHT  480
@@ -89,12 +97,5 @@ static const uint8_t SCL = GROVE_SCL;
 #define USE_HSPI_PORT
 #define TOUCH_CS    -1
 #define SMOOTH_FONT
-#define LOAD_GLCD
-#define LOAD_FONT2
-#define LOAD_FONT4
-#define LOAD_FONT6
-#define LOAD_FONT7
-#define LOAD_FONT8
-#define LOAD_GFXFF
 #define SPI_FREQUENCY       80000000
 #define SPI_READ_FREQUENCY  20000000

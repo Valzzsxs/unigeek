@@ -6,96 +6,141 @@
 
 #include "core/IKeyboard.h"
 #include <Wire.h>
+#include <Adafruit_TCA8418.h>
 
-// TCA8418 registers
-#define TCA8418_ADDR        0x34
-#define TCA8418_REG_CFG     0x01
-#define TCA8418_REG_INT_STAT 0x02
-#define TCA8418_REG_KEY_LCK_EC 0x03
-#define TCA8418_REG_KEY_EVENT 0x04
+#define KB_ROWS        4
+#define KB_COLS        10
+#define KB_KEY_FN      20   // row=2 col=0
+#define KB_KEY_SHIFT   28   // row=2 col=8
+#define KB_KEY_BACK    29   // row=2 col=9
 
-class KeyboardImpl : public IKeyboard
+struct KB_KeyValue_t {
+  const char normal;
+  const char shifted;
+  const char fn;
+};
+
+static constexpr KB_KeyValue_t _kb_map[KB_ROWS][KB_COLS] = {
+  // row 0
+  {
+    {'q', 'Q', '1'},
+    {'w', 'W', '2'},
+    {'e', 'E', '3'},
+    {'r', 'R', '4'},
+    {'t', 'T', '5'},
+    {'y', 'Y', '6'},
+    {'u', 'U', '7'},
+    {'i', 'I', '8'},
+    {'o', 'O', '9'},
+    {'p', 'P', '0'},
+  },
+  // row 1
+  {
+    {'a', 'A', '*'},
+    {'s', 'S', '/'},
+    {'d', 'D', '+'},
+    {'f', 'F', '-'},
+    {'g', 'G', '='},
+    {'h', 'H', ':'},
+    {'j', 'J', '\''},
+    {'k', 'K', '"'},
+    {'l', 'L', '@'},
+    {'\n','\n', '&'},
+  },
+  // row 2
+  {
+    {'\0','\0','\0'},
+    {'z', 'Z', '_'},
+    {'x', 'X', '$'},
+    {'c', 'C', ';'},
+    {'v', 'V', '?'},
+    {'b', 'B', '!'},
+    {'n', 'N', ','},
+    {'m', 'M', '.'},
+    {'\0','\0','\0'},
+    {'\b','\b', '#'},
+  },
+  // row 3
+  {
+    {' ', ' ', ' '},
+  },
+};
+
+class KeyboardImpl : public IKeyboard, public Adafruit_TCA8418
 {
 public:
-  void begin() override
-  {
+  void begin() override {
     Wire.begin(GROVE_SDA, GROVE_SCL);
     Wire.setClock(400000);
 
-    // enable key events, auto-increment
-    _writeReg(TCA8418_REG_CFG, 0x3E);
+    if (!Adafruit_TCA8418::begin(TCA8418_DEFAULT_ADDR, &Wire)) return;
+
+    this->matrix(KB_ROWS, KB_COLS);
+    this->flush();
+
+    pinMode(KB_BL, OUTPUT);
+    analogWrite(KB_BL, 127);
+
+    _fnPressed = false;
+    _shiftHeld = false;
+    _capsLock  = false;
+    _key       = 0;
+    _available = false;
   }
 
-  void update() override
-  {
-    // check if key event available
-    uint8_t eventCount = _readReg(TCA8418_REG_KEY_LCK_EC) & 0x0F;
-    if (eventCount == 0)
-    {
-      _key = 0;
-      _available = false;
+  void update() override {
+    if (Adafruit_TCA8418::available() == 0) return;
+
+    int raw = this->getEvent();
+    if (raw == 0) return;
+
+    bool pressed = (raw & 0x80) != 0;
+    uint8_t k    = (raw & 0x7F) - 1;
+
+    if (k / KB_COLS >= KB_ROWS) return;
+
+    // ── special keys ──────────────────────────────────────
+    if (k == KB_KEY_FN) {
+      if (pressed) _fnPressed = !_fnPressed;
       return;
     }
 
-    uint8_t event = _readReg(TCA8418_REG_KEY_EVENT);
-    bool pressed = (event & 0x80); // bit7: 1=press, 0=release
-
-    if (!pressed)
-    {
-      // only fire on release, same as INavigation wasPressed
-      _key = _mapKey(event & 0x7F);
-      _available = (_key != 0);
+    if (k == KB_KEY_SHIFT) {
+      _shiftHeld = pressed;
+      if (_fnPressed && pressed) _capsLock = !_capsLock;
+      return;
     }
 
-    // clear interrupt
-    _writeReg(TCA8418_REG_INT_STAT, 0x01);
+    if (!pressed) return;
+
+    // ── resolve character ──────────────────────────────────
+    uint8_t row = k / KB_COLS;
+    uint8_t col = k % KB_COLS;
+
+    char c;
+    if (_fnPressed)                  c = _kb_map[row][col].fn;
+    else if (_shiftHeld ^ _capsLock) c = _kb_map[row][col].shifted;
+    else                             c = _kb_map[row][col].normal;
+
+    if (c == '\0') return;
+
+    _key       = c;
+    _available = true;
   }
 
   bool available() override { return _available; }
 
-  char getKey() override
-  {
-    char k = _key;
-    _key = 0;
+  char getKey() override {
+    char k     = _key;
+    _key       = 0;
     _available = false;
     return k;
   }
 
 private:
-  char _key = 0;
+  char _key       = 0;
   bool _available = false;
-
-  char _mapKey(uint8_t code)
-  {
-    // TCA8418 key matrix map for T-Lora Pager QWERTY layout
-    // rows 0-6, cols 0-9
-    static const char keymap[70] = {
-      'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p',
-      'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', '\b',
-      '\0', 'z', 'x', 'c', 'v', 'b', 'n', 'm', '\0', '\n',
-      '\0', '\0', '\0', ' ', ' ', ' ', '\0', '\0', '\0', '\0',
-      '1', '2', '3', '4', '5', '6', '7', '8', '9', '0',
-      '!', '@', '#', '$', '%', '^', '&', '*', '(', ')',
-      '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0', '\0',
-    };
-    if (code == 0 || code > 70) return 0;
-    return keymap[code - 1];
-  }
-
-  uint8_t _readReg(uint8_t reg)
-  {
-    Wire.beginTransmission(TCA8418_ADDR);
-    Wire.write(reg);
-    Wire.endTransmission(false);
-    Wire.requestFrom((uint8_t)TCA8418_ADDR, (uint8_t)1);
-    return Wire.available() ? Wire.read() : 0;
-  }
-
-  void _writeReg(uint8_t reg, uint8_t val)
-  {
-    Wire.beginTransmission(TCA8418_ADDR);
-    Wire.write(reg);
-    Wire.write(val);
-    Wire.endTransmission();
-  }
+  bool _fnPressed = false;
+  bool _shiftHeld = false;
+  bool _capsLock  = false;
 };
