@@ -14,14 +14,55 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      - name: Install PlatformIO
+      - name: Install PlatformIO and esptool
         run: |
           python -m pip install --upgrade pip
-          pip install platformio
+          pip install platformio esptool
       - name: Build Firmware
         run: pio run
+      - name: Merge Firmware Binaries
+        run: |
+          mkdir -p build_output
+          find firmware/.pio -name "firmware.bin" | while read firmware_path; do
+            env_dir=$(dirname "$firmware_path")
+            env_name=$(basename "$env_dir")
+            echo "Merging binaries for environment: $env_name"
+
+            bootloader_path="$env_dir/bootloader.bin"
+            partitions_path="$env_dir/partitions.bin"
+
+            if [[ -f "$bootloader_path" && -f "$partitions_path" ]]; then
+              CHIP="esp32"
+              BOOTLOADER_OFFSET="0x1000"
+
+              # Heuristic to detect ESP32-S3 environments
+              # Check for common S3 indicators in the environment name
+              if [[ "$env_name" == *"s3"* || "$env_name" == *"t-lora-pager"* ]]; then
+                CHIP="esp32s3"
+                BOOTLOADER_OFFSET="0x0"
+              fi
+
+              output_bin="build_output/Bruce-${env_name}.bin"
+
+              # Use default flash settings (dio, 40m, 4MB) which are generally safe for booting most boards
+              # even if they support higher specs.
+              # Ideally, these would be parsed from board definitions.
+              esptool.py --chip $CHIP merge_bin \
+                -o "$output_bin" \
+                --flash_mode dio \
+                --flash_freq 40m \
+                --flash_size 4MB \
+                $BOOTLOADER_OFFSET "$bootloader_path" \
+                0x8000 "$partitions_path" \
+                0x10000 "$firmware_path"
+
+              echo "Created $output_bin"
+            else
+              echo "Skipping $env_name: Missing bootloader or partitions binary."
+            fi
+          done
       - name: Archive firmware artifacts
         uses: actions/upload-artifact@v4
         with:
           name: firmware-binaries
-          path: firmware/.pio/**/*.bin
+          path: build_output/*.bin
