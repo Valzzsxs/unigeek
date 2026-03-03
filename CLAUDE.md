@@ -39,7 +39,7 @@ All hardware differences are isolated in board-specific folders.
                               NOT defined for buzzer boards (M5StickC Plus) where setVolume() is a no-op
     APP_MENU_POWER_OFF        defined for T-Lora Pager and M5StickC Plus 1.1, adds Power Off in main menu
     DEVICE_HAS_NAV_MODE_SWITCH defined for M5StickC Plus 1.1 — enables nav mode setting (Default vs Encoder)
-                              BTN_A short press = back in encoder mode; hold 3s resets to default (main.cpp safety)
+                              hold 3s resets to default nav (handled in Device::boardHook())
 
 ---
 
@@ -50,16 +50,17 @@ All hardware differences are isolated in board-specific folders.
     │   ├── _devices/               custom board JSON definitions
     │   ├── m5stickplus_11/         M5StickC board implementation
     │   │   ├── boards.ini
-    │   │   ├── Device.cpp          createInstance() with AXP192, LittleFS
+    │   │   ├── Device.cpp          createInstance() + boardHook() (3s BTN_A → default nav reset)
     │   │   ├── Display.h
-    │   │   ├── Navigation.h
+    │   │   ├── Navigation.h        button-driven (AXP=UP BTN_B=DOWN BTN_A=PRESS)
+    │   │   ├── EncoderNavigation.h encoder nav (ROT=UP/DOWN BTN=PRESS BTN_A=BACK AXP=LEFT BTN_B=RIGHT)
     │   │   ├── Power.h
     │   │   └── pins_arduino.h
     │   ├── t_lora_pager/           T-Lora Pager board implementation
     │   │   ├── boards.ini
-    │   │   ├── Device.cpp          createInstance() with SD + LittleFS, keyboard
+    │   │   ├── Device.cpp          createInstance() + boardHook() (empty)
     │   │   ├── Display.h
-    │   │   ├── Navigation.h        rotary encoder, GPIO0 long-press power-off
+    │   │   ├── Navigation.h        rotary encoder + keyboard \b=BACK; takes IKeyboard* in constructor
     │   │   ├── Navigation.cpp      ISR in .cpp (IRAM_ATTR requirement)
     │   │   ├── Keyboard.h          TCA8418 3-layer keymap (fn/shift/caps)
     │   │   ├── Keyboard.cpp        ISR in .cpp
@@ -67,17 +68,17 @@ All hardware differences are isolated in board-specific folders.
     │   │   └── pins_arduino.h
     │   ├── m5_cardputer/           M5 Cardputer board implementation
     │   │   ├── config.ini
-    │   │   ├── Device.cpp          createInstance() with FSPI SD + LittleFS, keyboard
+    │   │   ├── Device.cpp          createInstance() + boardHook() (empty)
     │   │   ├── Display.h
-    │   │   ├── Navigation.h        keyboard-driven (;=UP .=DOWN ENTER=PRESS)
+    │   │   ├── Navigation.h        keyboard-driven (;=UP .=DOWN ENTER=PRESS \b=BACK ,=LEFT /=RIGHT)
     │   │   ├── Keyboard.h          74HC138 GPIO matrix, 2-pass shift scan, _waitRelease debounce
     │   │   ├── Power.h             ADC pin 10 battery, deep sleep power-off
     │   │   └── pins_arduino.h
     │   └── m5_cardputer_adv/       M5 Cardputer ADV board implementation
     │       ├── config.ini
-    │       ├── Device.cpp          createInstance() with FSPI SD + LittleFS, keyboard
+    │       ├── Device.cpp          createInstance() + boardHook() (empty)
     │       ├── Display.h
-    │       ├── Navigation.h        keyboard-driven (;=UP .=DOWN ENTER=PRESS)
+    │       ├── Navigation.h        keyboard-driven (;=UP .=DOWN ENTER=PRESS \b=BACK ,=LEFT /=RIGHT)
     │       ├── Keyboard.h          TCA8418 via Wire1, mapRawKeyToPhysical, shift toggle
     │       ├── Power.h             ADC pin 10 battery, deep sleep power-off
     │       └── pins_arduino.h
@@ -173,14 +174,16 @@ All hardware differences are isolated in board-specific folders.
                                 to avoid stealing text input keys
     Uni.Keyboard->getKey()      consume and return buffered key; sets _waitRelease on GPIO-matrix boards
 
-    NavigationImpl (keyboard boards) uses peekKey() to check for nav keys (;/./ \n).
-    Only calls getKey() when the key is a nav key, leaving all other keys for action overlays.
+    NavigationImpl (keyboard boards) uses peekKey() to check for nav keys (;  .  \n  \b  ,  /).
+    Only calls getKey() when the key is a nav key — all other keys remain for action overlays.
+    \b (backspace) is consumed by Nav and emitted as DIR_BACK; action overlays receive it via
+    Uni.Nav->readDirection() rather than Uni.Keyboard->getKey().
 
 ### Device Update Order
 
-    Device::update() always calls Keyboard->update() before Nav->update().
-    This ensures a single keyboard scan per frame — Nav reads the already-updated state.
-    Never call Keyboard->update() inside NavigationImpl; it causes double-scan conflicts.
+    Device::update() calls boardHook() then Keyboard->update() then Nav->update() each frame.
+    boardHook() is defined per-board in Device.cpp — M5StickC uses it for the 3s BTN_A reset,
+    all other boards define it empty. Never call Keyboard->update() inside NavigationImpl.
 
 ### Screen Pattern
 
@@ -210,12 +213,12 @@ All hardware differences are isolated in board-specific folders.
 
 ### Back Navigation
 
-    - ListScreen provides virtual onBack() — called on:
-        - backspace key (DEVICE_HAS_KEYBOARD boards)
-        - BTN_A short press when encoder nav is active (DEVICE_HAS_NAV_MODE_SWITCH boards)
-        - user selects the auto-appended "< Back" item (no-keyboard, non-encoder devices)
+    - DIR_BACK is emitted by navigation and consumed by ListScreen → calls onBack()
+        - Keyboard boards (Cardputer, ADV, T-Lora): \b key consumed by NavigationImpl → DIR_BACK
+        - Encoder nav (M5StickC): BTN_A short press (<3s) → DIR_BACK
+        - Default nav (M5StickC): no DIR_BACK; back via "< Back" list item
     - hasBackItem() controls whether "< Back" appears — default true, override false for root screens
-    - "< Back" is automatically hidden when encoder nav is active (BTN_A acts as back instead)
+    - "< Back" is hidden on keyboard boards and encoder nav (DIR_BACK handles it instead)
     - setItems() calls render() (full chrome + body redraw)
     - Implement onBack() in a .cpp file when it needs to instantiate a parent screen:
 
@@ -237,7 +240,13 @@ All hardware differences are isolated in board-specific folders.
 
     Uni.Nav->wasPressed()        true once per press/direction event
     Uni.Nav->readDirection()     consumes and returns direction
-    DIR_UP / DIR_DOWN / DIR_PRESS
+    DIR_UP / DIR_DOWN / DIR_PRESS / DIR_BACK / DIR_LEFT / DIR_RIGHT
+
+    ListScreen handles all six directions automatically:
+      DIR_UP / DIR_DOWN   move selection by 1, wraps
+      DIR_LEFT / DIR_RIGHT  page jump by visible-item count, clamps at ends
+      DIR_PRESS           select item (or "< Back" item on no-keyboard/default-nav)
+      DIR_BACK            call onBack()
 
 ### Action Overlays (all blocking)
 
@@ -251,7 +260,8 @@ All hardware differences are isolated in board-specific folders.
     void        ShowStatusAction::show("Message", 0)        show and return immediately, no wipe
     void        ShowStatusAction::show("Message", 1500)     show, block ms, then wipe
     // Long messages are automatically word-wrapped (max 5 lines, box grows to fit)
-    // InputSelectAction: backspace (DEVICE_HAS_KEYBOARD) dismisses overlay and returns nullptr
+    // InputSelectAction: DIR_BACK dismisses overlay and returns nullptr
+    // InputTextAction / InputNumberAction: DIR_BACK deletes last character (keyboard mode)
 
 ### Storage
 
@@ -385,8 +395,9 @@ All hardware differences are isolated in board-specific folders.
   and enableInterrupts() after matrix(); guard update() with _ready flag in case begin() failed
 - M5 Cardputer keyboard _waitRelease: after getKey() consumes a key, update() blocks until all GPIO inputs
   are released to prevent the same physical keypress registering multiple times
-- peekKey() / getKey() pattern: NavigationImpl always peeks first; only calls getKey() for nav keys (;/./ \n)
-  All other keys remain in the buffer for action overlays (InputTextAction, InputNumberAction, etc.)
+- peekKey() / getKey() pattern: NavigationImpl always peeks first; only calls getKey() for nav keys (;  .  \n  \b  ,  /)
+  All other keys remain in the buffer for action overlays. \b is consumed by Nav (DIR_BACK),
+  so action overlays handle delete/cancel via Uni.Nav->readDirection() == DIR_BACK, not Uni.Keyboard->getKey()
 - ListItem struct has no default for sublabel — single-field init {"Label"} zero-initializes sublabel to nullptr
 - ListScreen uses TFT_eSprite for body rendering — eliminates flicker on highlight change
   (full body rendered to sprite then pushed in one operation, no visible clear-then-draw flash)

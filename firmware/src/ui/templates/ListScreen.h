@@ -62,6 +62,23 @@ public:
         onRender();
         if (Uni.Speaker) Uni.Speaker->beep();
       }
+      else if (dir == INavigation::DIR_LEFT)
+      {
+        uint8_t page = bodyH() / ITEM_H;
+        _selectedIndex = (_selectedIndex >= page) ? _selectedIndex - page : 0;
+        _scrollIfNeeded();
+        onRender();
+        if (Uni.Speaker) Uni.Speaker->beep();
+      }
+      else if (dir == INavigation::DIR_RIGHT)
+      {
+        uint8_t page = bodyH() / ITEM_H;
+        uint8_t last = eff - 1;
+        _selectedIndex = (_selectedIndex + page <= last) ? _selectedIndex + page : last;
+        _scrollIfNeeded();
+        onRender();
+        if (Uni.Speaker) Uni.Speaker->beep();
+      }
       else if (dir == INavigation::DIR_PRESS)
       {
 #ifndef DEVICE_HAS_KEYBOARD

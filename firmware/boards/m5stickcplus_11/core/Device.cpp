@@ -16,7 +16,7 @@ AXP192 axp;
 
 static DisplayImpl      display(&axp);
 static NavigationImpl   navigation(&axp);
-static EncoderNavigation encoderNavigation;
+static EncoderNavigation encoderNavigation(&axp);
 static PowerImpl        power(&axp);
 static StorageLFS       storageLFS;
 static SpeakerBuzzer    speaker;

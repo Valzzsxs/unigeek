@@ -17,6 +17,8 @@ public:
       else if (c == '.')  { _kb->getKey(); updateState(DIR_DOWN);  return; }
       else if (c == '\n') { _kb->getKey(); updateState(DIR_PRESS); return; }
       else if (c == '\b') { _kb->getKey(); updateState(DIR_BACK);  return; }
+      else if (c == ',')  { _kb->getKey(); updateState(DIR_LEFT);  return; }
+      else if (c == '/')  { _kb->getKey(); updateState(DIR_RIGHT); return; }
     }
     updateState(DIR_NONE);
   }

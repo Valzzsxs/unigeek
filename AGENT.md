@@ -56,7 +56,7 @@ When implementing board-specific hardware features, check these FIRST:
 6. If board has keyboard:
    - Implement Keyboard.h with IKeyboard: begin(), update(), available(), peekKey(), getKey()
    - Add DEVICE_HAS_KEYBOARD to build_flags
-   - peekKey() must NOT consume the key — Navigation uses it to avoid stealing text input
+   - peekKey() must NOT consume the key — NavigationImpl peeks first, only consumes nav keys (;  .  \n  \b  ,  /)
    - For GPIO matrix boards: add _waitRelease debounce — set true in getKey(), block in update() until all inputs low
 7. If board has speaker:
    - Define `SPK_BCLK`, `SPK_WCLK`, `SPK_DOUT` in pins_arduino.h
@@ -68,6 +68,7 @@ When implementing board-specific hardware features, check these FIRST:
 8. If board has SD card: create SPIClass with correct bus (HSPI or FSPI), call .begin() with explicit pins,
    pass to SD.begin(csPin, spi). Never use default SPI bus.
 9. Always init StorageLFS — all boards have a SPIFFS/LittleFS partition
+10. Define Device::boardHook() in Device.cpp — empty `void Device::boardHook() {}` if no per-frame board logic needed
 
 ---
 
@@ -109,8 +110,9 @@ Always null-check before using — Uni.StorageSD is nullptr on M5StickC.
 - Do NOT use init() in screens — use onInit()
 - Do NOT include pins_arduino.h — it is auto-included by the build system
 - Do NOT call Keyboard->update() inside NavigationImpl — Device::update() does this; double-scan causes conflicts
-- Do NOT use getKey() in NavigationImpl unconditionally — use peekKey() first; only consume nav keys (;/./ \n)
-- Do NOT omit backspace handling inside action overlay _run() loops — unhandled \b freezes the overlay
+- Do NOT use getKey() in NavigationImpl unconditionally — use peekKey() first; only consume nav keys (;  .  \n  \b  ,  /)
+- Do NOT read \b directly from Uni.Keyboard in action overlays — NavigationImpl consumes it; overlays receive DIR_BACK via readDirection()
+- Do NOT forget to define Device::boardHook() in every board's Device.cpp (empty stub if unused) — linker requires it
 - Do NOT call lcd.fillRect() before pushing a sprite — the sprite push already overwrites the area (causes flash)
 - Do NOT call Uni.Speaker directly — always null-check: if (Uni.Speaker) Uni.Speaker->beep()
 - Do NOT play sound in production if DEVICE_HAS_SOUND is not defined — guard at compile time too
@@ -137,18 +139,26 @@ All actions wipe their overlay area on close.
 
 ## Navigation Direction Values
 
-    DIR_UP      encoder up / BTN_A on M5StickC / ; key on Cardputer
-    DIR_DOWN    encoder down / BTN_B on M5StickC / . key on Cardputer
-    DIR_PRESS   encoder press / power button on M5StickC / ENTER key on Cardputer
-    DIR_NONE    no event — wasPressed() returns false
+    DIR_UP     encoder CW / AXP btn M5StickC-default / ; key Cardputer / encoder CCW T-Lora
+    DIR_DOWN   encoder CCW / BTN_B M5StickC-default / . key Cardputer / encoder CW T-Lora
+    DIR_PRESS  encoder btn / BTN_A M5StickC-default / ENTER key Cardputer / encoder btn T-Lora
+    DIR_BACK   BTN_A <3s M5StickC-encoder / \b key keyboard boards (consumed by NavigationImpl)
+    DIR_LEFT   AXP btn M5StickC-encoder / , key Cardputer
+    DIR_RIGHT  BTN_B M5StickC-encoder / / key Cardputer
+    DIR_NONE   no event — wasPressed() returns false
 
-## Encoder Back Button (M5StickC + DEVICE_HAS_NAV_MODE_SWITCH)
+    ListScreen handles all six automatically:
+      UP/DOWN     move by 1, wraps around
+      LEFT/RIGHT  page jump by visible count, clamps at ends
+      PRESS       select item (or "< Back" item on no-keyboard default nav)
+      BACK        call onBack()
 
-When nav mode is "encoder":
-- BTN_A short press (< 3s) → ListScreen::onBack() called on release
-- BTN_A hold ≥ 3s          → main.cpp resets nav to "default"; release does NOT trigger onBack()
-- "< Back" item is hidden automatically in ListScreen when encoder mode is active
-- The 3s hold safety reset always runs in main.cpp loop() regardless of current screen
+## M5StickC Nav Mode (DEVICE_HAS_NAV_MODE_SWITCH)
+
+    Default nav:  AXP=UP  BTN_B=DOWN  BTN_A=PRESS  — no BACK/LEFT/RIGHT
+    Encoder nav:  ROT=UP/DOWN  BTN=PRESS  BTN_A<3s=BACK  AXP=LEFT  BTN_B=RIGHT
+    Hold BTN_A ≥ 3s: Device::boardHook() (in M5StickC Device.cpp) resets nav to "default"
+    "< Back" item hidden in ListScreen on keyboard boards and encoder nav (DIR_BACK handles it)
 
 ---
 
