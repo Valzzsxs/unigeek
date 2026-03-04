@@ -8,6 +8,7 @@
 #include "screens/wifi/network/WorldClockScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "ui/actions/ShowQRCodeAction.h"
 #include <WiFi.h>
 #include <esp_wifi.h>
 
@@ -32,15 +33,13 @@ void NetworkMenuScreen::onBack() {
 
 void NetworkMenuScreen::onUpdate() {
   if (_state == STATE_INFORMATION) {
-#ifdef DEVICE_HAS_KEYBOARD
-    if (Uni.Keyboard && Uni.Keyboard->available()) {
-      if (Uni.Keyboard->getKey() == '\b') { _showMenu(); return; }
-    }
-#endif
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_PRESS) _showMenu();
-      else _scrollView.onNav(dir);
+      if (dir == INavigation::DIR_BACK) { _showMenu(); return; }
+#ifndef DEVICE_HAS_KEYBOARD
+      if (dir == INavigation::DIR_PRESS) { _showMenu(); return; }
+#endif
+      _scrollView.onNav(dir);
     }
     return;
   }
@@ -53,7 +52,7 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
   } else if (_state == STATE_MENU) {
     switch (index) {
       case 0: _showInformation(); break;
-      case 1: /* TODO: QR Code */  break;
+      case 1: _showWifiQR(); break;
       case 2: Screen.setScreen(new WorldClockScreen()); break;
       case 3: /* TODO: WiNetIPScannerScreen */ break;
       case 4: /* TODO: WiNetFileManager */    break;
@@ -149,6 +148,22 @@ bool NetworkMenuScreen::_connect(const char* bssid, const char* ssid, const char
 
   render();
   return false;
+}
+
+void NetworkMenuScreen::_showWifiQR() {
+  String ssid = WiFi.SSID();
+  String pass = WiFi.psk();
+
+  String content = "WIFI:T:";
+  content += (pass.length() > 0) ? "WPA" : "nopass";
+  content += ";S:";
+  content += ssid;
+  content += ";P:";
+  content += pass;
+  content += ";;";
+
+  ShowQRCodeAction::show(ssid.c_str(), content.c_str());
+  _showMenu();
 }
 
 void NetworkMenuScreen::_showInformation() {

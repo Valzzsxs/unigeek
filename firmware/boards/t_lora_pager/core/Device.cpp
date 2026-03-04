@@ -25,24 +25,14 @@ static SpeakerLoRa    speaker;
 void Device::applyNavMode() {}
 void Device::boardHook() {}
 
-void Device::setupIo()
-{
+Device* Device::createInstance() {
   pinMode(LCD_BL, OUTPUT);
   digitalWrite(LCD_BL, HIGH);
-
-  const uint8_t share_spi_bus_devices_cs_pins[] = {
-    NFC_CS,
-    LORA_CS,
-    SD_CS,
-    LORA_RST,
-  };
+  const uint8_t share_spi_bus_devices_cs_pins[] = { NFC_CS, LORA_CS, SD_CS, LORA_RST };
   for (auto pin : share_spi_bus_devices_cs_pins) {
     pinMode(pin, OUTPUT);
     digitalWrite(pin, HIGH);
   }
-}
-
-Device* Device::createInstance() {
   Wire.begin(GROVE_SDA, GROVE_SCL);  // I2C: keyboard, RTC, sensor, audio
   sharedSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
   storageLFS.begin();

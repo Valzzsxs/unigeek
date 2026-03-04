@@ -22,8 +22,6 @@ static PowerImpl        power(&axp);
 static StorageLFS       storageLFS;
 static SpeakerBuzzer    speaker;
 
-void Device::setupIo() {}
-
 Device* Device::createInstance() {
   pinMode(BTN_B, INPUT_PULLUP);
   pinMode(BTN_A, INPUT_PULLUP);

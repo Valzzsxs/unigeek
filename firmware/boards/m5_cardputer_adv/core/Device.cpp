@@ -17,19 +17,14 @@ static StorageLFS     storageLFS;
 static SPIClass       sdSpi(FSPI);
 static SpeakerADV     speaker;
 
-void Device::setupIo()
-{
-  pinMode(LCD_BL, OUTPUT);
-  digitalWrite(LCD_BL, HIGH);
-
-  pinMode(SD_CS, OUTPUT);
-  digitalWrite(SD_CS, HIGH);
-}
-
 void Device::applyNavMode() {}
 void Device::boardHook() {}
 
 Device* Device::createInstance() {
+  pinMode(LCD_BL, OUTPUT);
+  digitalWrite(LCD_BL, HIGH);
+  pinMode(SD_CS, OUTPUT);
+  digitalWrite(SD_CS, HIGH);
   sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
   storageLFS.begin();
   bool sdOk = storageSD.begin(SD_CS, sdSpi);

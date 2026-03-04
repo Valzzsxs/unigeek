@@ -62,4 +62,5 @@ private:
   void   _connectToSelected(uint8_t index);
   bool   _connect(const char* bssid, const char* ssid, const char* password);
   void   _showInformation();
+  void   _showWifiQR();
 };
