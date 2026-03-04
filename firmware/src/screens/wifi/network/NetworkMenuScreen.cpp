@@ -8,6 +8,7 @@
 #include "screens/wifi/network/WorldClockScreen.h"
 #include "screens/wifi/network/IPScannerScreen.h"
 #include "screens/wifi/network/PortScannerScreen.h"
+#include "screens/wifi/network/WebFileManagerScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 #include "ui/actions/ShowQRCodeAction.h"
@@ -58,7 +59,7 @@ void NetworkMenuScreen::onItemSelected(uint8_t index) {
       case 2: Screen.setScreen(new WorldClockScreen()); break;
       case 3: Screen.setScreen(new IPScannerScreen());  break;
       case 4: Screen.setScreen(new PortScannerScreen()); break;
-      case 5: /* TODO: WiNetFileManager */    break;
+      case 5: Screen.setScreen(new WebFileManagerScreen()); break;
     }
   } else if (_state == STATE_INFORMATION) {
     _showMenu();

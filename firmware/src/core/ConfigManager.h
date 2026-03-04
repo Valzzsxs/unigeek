@@ -26,6 +26,8 @@
 #define APP_CONFIG_PRIMARY_COLOR_DEFAULT        "Blue"
 #define APP_CONFIG_NAV_MODE                     "nav_mode"
 #define APP_CONFIG_NAV_MODE_DEFAULT             "default"
+#define APP_CONFIG_WEB_PASSWORD                 "web_password"
+#define APP_CONFIG_WEB_PASSWORD_DEFAULT         "admin"
 
 class ConfigManager
 {
