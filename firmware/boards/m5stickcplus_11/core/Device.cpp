@@ -10,7 +10,8 @@
 #include "Display.h"
 #include "Power.h"
 #include "Speaker.h"
-#include <AXP192.h>
+#include "lib/AXP192.h"
+#include <Wire.h>
 
 AXP192 axp;
 
@@ -21,13 +22,12 @@ static PowerImpl        power(&axp);
 static StorageLFS       storageLFS;
 static SpeakerBuzzer    speaker;
 
-void Device::setupIo()
-{
-  pinMode(BTN_B, INPUT_PULLUP);
-  pinMode(BTN_A, INPUT_PULLUP);
-}
+void Device::setupIo() {}
 
 Device* Device::createInstance() {
+  pinMode(BTN_B, INPUT_PULLUP);
+  pinMode(BTN_A, INPUT_PULLUP);
+  Wire1.begin(INTERNAL_SDA, INTERNAL_SCL);  // Wire1: AXP192 + BM8563 share same internal I2C bus
   storageLFS.begin();
 
   return new Device(display, power, &navigation, nullptr,

@@ -65,10 +65,16 @@ When implementing board-specific hardware features, check these FIRST:
    - Instantiate SpeakerI2S (from src/core/SpeakerI2S.h) in Device.cpp, pass to Device constructor as `sound` param
    - beep() checks APP_CONFIG_NAV_SOUND before playing
    - Always guard Uni.Speaker calls with nullptr check: if (Uni.Speaker) Uni.Speaker->beep()
-8. If board has SD card: create SPIClass with correct bus (HSPI or FSPI), call .begin() with explicit pins,
-   pass to SD.begin(csPin, spi). Never use default SPI bus.
-9. Always init StorageLFS — all boards have a SPIFFS/LittleFS partition
-10. Define Device::boardHook() in Device.cpp — empty `void Device::boardHook() {}` if no per-frame board logic needed
+8. If board has RTC:
+   - Define DEVICE_HAS_RTC, RTC_I2C_ADDR, RTC_REG_BASE in pins_arduino.h
+   - Define RTC_WIRE only if the board's RTC is not on Wire (the default fallback in RtcManager.h)
+     Example: M5StickC uses Wire1 → #define RTC_WIRE Wire1; T-Lora uses Wire → no define needed
+   - Call RtcManager::syncSystemFromRtc() in main.cpp setup() after Uni.begin()
+   - Call RtcManager::syncRtcFromSystem() after confirmed NTP sync
+10. If board has SD card: create SPIClass with correct bus (HSPI or FSPI), call .begin() with explicit pins,
+    pass to SD.begin(csPin, spi). Never use default SPI bus.
+11. Always init StorageLFS — all boards have a SPIFFS/LittleFS partition
+12. Define Device::boardHook() in Device.cpp — empty `void Device::boardHook() {}` if no per-frame board logic needed
 
 ---
 
@@ -116,6 +122,14 @@ Always null-check before using — Uni.StorageSD is nullptr on M5StickC.
 - Do NOT call lcd.fillRect() before pushing a sprite — the sprite push already overwrites the area (causes flash)
 - Do NOT call Uni.Speaker directly — always null-check: if (Uni.Speaker) Uni.Speaker->beep()
 - Do NOT play sound in production if DEVICE_HAS_SOUND is not defined — guard at compile time too
+- Do NOT use getLocalTime() to gate NTP-dependent rendering — it returns true if ANY time is set
+  (including RTC-restored time). Use sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED instead.
+- Do NOT check DIR_BACK after an early-return guard in ListScreen onUpdate() — always check DIR_BACK
+  first so back navigation works even when the list is empty (_effectiveCount() == 0)
+- Do NOT skip the sprite push in ListScreen onRender() when the list is empty — always push (black fill)
+  to clear any overlays (ShowStatusAction, etc.) that may have been drawn over the body area
+- Do NOT put Wire1.begin() inside AXP192::begin() on M5StickC — Device::createInstance() calls
+  Wire1.begin(INTERNAL_SDA, INTERNAL_SCL) before axp.begin(); AXP192::begin() only sets clock speed
 
 ---
 

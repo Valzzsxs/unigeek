@@ -5,7 +5,7 @@
 #pragma once
 
 #include "core/INavigation.h"
-#include <AXP192.h>
+#include "lib/AXP192.h"
 
 class NavigationImpl : public INavigation
 {

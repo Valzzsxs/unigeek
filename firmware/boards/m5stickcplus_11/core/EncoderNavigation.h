@@ -6,7 +6,7 @@
 
 #include "core/INavigation.h"
 #include "M5HatMiniEncoderC.h"
-#include <AXP192.h>
+#include "lib/AXP192.h"
 
 M5HatMiniEncoderC encoder;
 

@@ -95,6 +95,7 @@ All hardware differences are isolated in board-specific folders.
     │   │   ├── IStorage.h
     │   │   ├── StorageSD.h         SD implementation (shared, used by both boards)
     │   │   ├── StorageLFS.h        LittleFS implementation (shared, used by both boards)
+    │   │   ├── RtcManager.h        header-only RTC driver (PCF8563/PCF85063A/BM8563), gated by DEVICE_HAS_RTC
     │   │   ├── ScreenManager.h
     │   │   └── ConfigManager.h     key=value persistence, #define APP_CONFIG_* keys
     │   ├── screens/
@@ -166,6 +167,36 @@ All hardware differences are isolated in board-specific folders.
       SpeakerI2S    — Cardputer / Cardputer ADV (I2S, I2S_NUM_1, WAV capable)
       SpeakerADV    — Cardputer ADV only (extends SpeakerI2S, adds ES8311 codec init)
       SpeakerBuzzer — M5StickC Plus 1.1 (LEDC PWM on GPIO 2, no WAV, tone sequences only)
+
+### RtcManager
+
+    // src/core/RtcManager.h — header-only, gated by #ifdef DEVICE_HAS_RTC
+    // Uses RTC_WIRE (Wire or Wire1) + RTC_I2C_ADDR + RTC_REG_BASE from pins_arduino.h
+
+    RtcManager::syncSystemFromRtc()   read RTC → set ESP32 system clock via settimeofday()
+                                      call once in main.cpp setup() after Uni.begin()
+    RtcManager::syncRtcFromSystem()   read ESP32 system time → write RTC registers
+                                      call in WorldClockScreen after first successful NTP sync
+
+    pins_arduino.h defines required per board:
+      DEVICE_HAS_RTC        gates entire RtcManager implementation
+      RTC_I2C_ADDR          0x51 for PCF8563, PCF85063A, and BM8563
+      RTC_REG_BASE          0x02 for BM8563/PCF8563 (seconds at 0x02)
+                            0x04 for PCF85063A (seconds at 0x04)
+      RTC_WIRE              (optional) TwoWire instance — defaults to Wire if not defined
+                            Only define if board uses a non-Wire bus (e.g. M5StickC: #define RTC_WIRE Wire1)
+
+    RtcManager.h has built-in fallback:
+      #ifndef RTC_WIRE
+      #define RTC_WIRE Wire
+      #endif
+    So T-Lora Pager (Wire) needs no RTC_WIRE define; M5StickC defines RTC_WIRE Wire1.
+
+    Board RTC chips:
+      M5StickC Plus 1.1:  BM8563    — INTERNAL_SDA=21/INTERNAL_SCL=22, RTC_WIRE=Wire1, RTC_REG_BASE=0x02
+      T-Lora Pager:       PCF85063A — GROVE_SDA=3/GROVE_SCL=2,         no RTC_WIRE define, RTC_REG_BASE=0x04
+
+    syncSystemFromRtc() rejects time before 2020-01-01 (epoch < 1577836800) — RTC not yet set
 
 ### IKeyboard Interface
 
@@ -423,6 +454,21 @@ All hardware differences are isolated in board-specific folders.
 - ESP32-S3 HSPI warning (`spiAttachMISO: HSPI Does not have default pins`) is harmless when TFT_MISO=-1
 - Brightness LEDC must use Arduino core 2.x API: ledcSetup(ch, freq, bits) + ledcAttachPin(pin, ch) + ledcWrite(ch, duty)
   ledcAttach(pin, freq, bits) is core 3.x only — will not compile on ESP32 Arduino 2.x
+- M5StickC Plus I2C bus split: the internal I2C hardware peripheral is Wire1 (not Wire).
+  Both AXP192 PMIC (0x34) and BM8563 RTC (0x51) share Wire1 on pins INTERNAL_SDA=21/INTERNAL_SCL=22.
+  Wire (I2C0) is a separate hardware peripheral; putting AXP192 on Wire causes requestFrom() Error -1
+  because the BM8563 and AXP192 are physically wired to the Wire1 peripheral.
+  Fix: call Wire1.begin(INTERNAL_SDA, INTERNAL_SCL) in Device::createInstance(). AXP192::begin()
+  only calls Wire1.setClock(400000) — no Wire1.begin() inside the lib (createInstance handles init).
+  Define RTC_WIRE Wire1 in pins_arduino.h so RtcManager uses Wire1 instead of its Wire default.
+- WorldClockScreen NTP gate: getLocalTime() returns true if any time is set (including RTC-restored
+  time). To ensure the display only shows after a real NTP sync, gate rendering on
+  sntp_get_sync_status() == SNTP_SYNC_STATUS_COMPLETED (#include <esp_sntp.h>). Keep a _synced flag
+  so rendering continues after the first successful sync even as sntp status resets.
+- ListScreen DIR_BACK with empty list: the _effectiveCount() == 0 early-return in onUpdate() fires
+  before the DIR_BACK check, breaking back navigation on empty screens. Fix: check DIR_BACK first,
+  before the eff == 0 guard. Similarly, onRender() must always push the sprite (black fill) even
+  when the list is empty — otherwise ShowStatusAction overlays linger after clearing the list.
 
 ---
 

@@ -5,6 +5,8 @@
 #include "WorldClockScreen.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "core/RtcManager.h"
+#include "ui/actions/ShowStatusAction.h"
+#include <esp_sntp.h>
 
 void WorldClockScreen::_back() {
   Screen.setScreen(new NetworkMenuScreen());
@@ -16,6 +18,7 @@ void WorldClockScreen::onInit() {
     return;
   }
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  ShowStatusAction::show("Syncing NTP...", 0);
 }
 
 void WorldClockScreen::onUpdate() {
@@ -25,17 +28,11 @@ void WorldClockScreen::onUpdate() {
     onRender();
   }
 
-#ifdef DEVICE_HAS_KEYBOARD
-  if (Uni.Keyboard && Uni.Keyboard->available()) {
-    char c = Uni.Keyboard->getKey();
-    if (c == '\b') { _back(); return; }
-  }
-#endif
-
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
-    if      (dir == INavigation::DIR_UP)   _adjustOffset( STEP);
-    else if (dir == INavigation::DIR_DOWN) _adjustOffset(-STEP);
+    if      (dir == INavigation::DIR_UP)    _adjustOffset( STEP);
+    else if (dir == INavigation::DIR_DOWN)  _adjustOffset(-STEP);
+    else if (dir == INavigation::DIR_BACK)  _back();
 #ifndef DEVICE_HAS_KEYBOARD
     else if (dir == INavigation::DIR_PRESS) _back();
 #endif
@@ -43,20 +40,20 @@ void WorldClockScreen::onUpdate() {
 }
 
 void WorldClockScreen::onRender() {
-  auto& lcd = Uni.Lcd;
-  lcd.fillRect(bodyX(), bodyY(), bodyW(), bodyH(), TFT_BLACK);
-
-  int cx = bodyX() + bodyW() / 2;
-  int cy = bodyY() + bodyH() / 2;
+  // Wait for actual NTP sync — not just RTC-restored time
+  if (!_synced && sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED) return;
 
   struct tm timeInfo;
-  if (!getLocalTime(&timeInfo)) {
-    lcd.setTextDatum(MC_DATUM);
-    lcd.setTextColor(TFT_DARKGREY);
-    lcd.setTextSize(1);
-    lcd.drawString("Waiting for NTP...", cx, cy);
-    return;
-  }
+  if (!getLocalTime(&timeInfo, 0)) return;
+
+  auto& lcd = Uni.Lcd;
+
+  TFT_eSprite sprite(&lcd);
+  sprite.createSprite(bodyW(), bodyH());
+  sprite.fillSprite(TFT_BLACK);
+
+  int cx = bodyW() / 2;
+  int cy = bodyH() / 2;
 
   if (!_synced) {
     _synced = true;
@@ -78,24 +75,27 @@ void WorldClockScreen::onRender() {
   char offsetStr[12];
   snprintf(offsetStr, sizeof(offsetStr), "UTC %+d:%02d",
            _offsetMinutes / 60, abs(_offsetMinutes % 60));
-  lcd.setTextDatum(MC_DATUM);
-  lcd.setTextColor(TFT_DARKGREY);
-  lcd.setTextSize(1);
-  lcd.drawString(offsetStr, cx, cy - 14);
+  sprite.setTextDatum(MC_DATUM);
+  sprite.setTextColor(TFT_DARKGREY);
+  sprite.setTextSize(1);
+  sprite.drawString(offsetStr, cx, cy - 14);
 
   // time
   char timeStr[12];
   strftime(timeStr, sizeof(timeStr), "%H:%M:%S", &timeInfo);
-  lcd.setTextColor(TFT_WHITE);
-  lcd.setTextSize(2);
-  lcd.drawString(timeStr, cx, cy);
+  sprite.setTextColor(TFT_WHITE);
+  sprite.setTextSize(2);
+  sprite.drawString(timeStr, cx, cy);
 
   // hint
-  lcd.setTextSize(1);
-  lcd.setTextColor(TFT_DARKGREY);
+  sprite.setTextSize(1);
+  sprite.setTextColor(TFT_DARKGREY);
 #ifdef DEVICE_HAS_KEYBOARD
-  lcd.drawString("BSP:back  UP/DN:offset", cx, bodyY() + bodyH() - 8);
+  sprite.drawString("BACK:back  UP/DN:offset", cx, bodyH() - 8);
 #else
-  lcd.drawString("UP/DN:offset  PRESS:back", cx, bodyY() + bodyH() - 8);
+  sprite.drawString("UP/DN:offset  PRESS:back", cx, bodyH() - 8);
 #endif
+
+  sprite.pushSprite(bodyX(), bodyY());
+  sprite.deleteSprite();
 }

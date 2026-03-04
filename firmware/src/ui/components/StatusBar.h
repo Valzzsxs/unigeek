@@ -1,8 +1,9 @@
 #pragma once
-#include "AXP192.h"
+#include "../../../boards/m5stickcplus_11/lib/AXP192.h"
 #include "core/Device.h"
 #include "core/ConfigManager.h"
 #include "ui/components/Icon.h"
+#include <time.h>
 
 class StatusBar
 {
@@ -18,11 +19,17 @@ public:
       : battery(bat), wifiOn(wifi), bluetoothOn(bt), isCharging(charging) {}
   };
 
-  static constexpr uint8_t WIDTH      = 32;
-  static constexpr uint8_t BOX_SIZE   = 20;
-  static constexpr uint8_t BOX_X      = (WIDTH - BOX_SIZE) / 2;
-  static constexpr uint8_t SLOT_GAP   = 4;
-  static constexpr uint8_t SLOT_START = 6;
+  static constexpr uint8_t WIDTH           = 32;
+  static constexpr uint8_t BOX_SIZE        = 20;
+  static constexpr uint8_t BOX_X           = (WIDTH - BOX_SIZE) / 2;
+  static constexpr uint8_t SLOT_GAP        = 4;
+  static constexpr uint8_t SLOT_START      = 6;
+  // clock box: width=BOX_SIZE, height = PAD + textH + lineGap + textH + PAD
+  static constexpr uint8_t CLOCK_PAD       = 3;   // top/bottom padding inside box
+  static constexpr uint8_t CLOCK_LINE_GAP  = 2;   // gap between hour and minute text
+  static constexpr uint8_t CLOCK_TEXT_H    = 8;   // setTextSize(1) character height
+  static constexpr uint8_t CLOCK_BOX_H    = CLOCK_PAD * 2 + CLOCK_TEXT_H * 2 + CLOCK_LINE_GAP;
+  static constexpr uint8_t CLOCK_BOTTOM   = 6;    // gap from bottom edge of sprite
 
   void render(const Status& status)
   {
@@ -56,6 +63,27 @@ public:
     uint16_t y3 = _slotY(3);
     _drawBox(sprite, y3);
     Icons::drawBluetooth(sprite, BOX_X + 1, y3 + 1, status.bluetoothOn);
+
+    // ─── Clock: hour/minute in one box (bottom-anchored) ─
+    {
+      time_t now = time(nullptr);
+      if (now > 1577836800L) {
+        struct tm* t = localtime(&now);
+        char buf[4];
+        uint16_t boxY = (uint16_t)lcd.height() - CLOCK_BOTTOM - CLOCK_BOX_H;
+
+        sprite.fillRoundRect(BOX_X, boxY, BOX_SIZE, CLOCK_BOX_H, 3, TFT_DARKGREY);
+        sprite.setTextSize(1);
+        sprite.setTextDatum(TC_DATUM);
+        sprite.setTextColor(TFT_WHITE);
+
+        snprintf(buf, sizeof(buf), "%02d", t->tm_hour);
+        sprite.drawString(buf, WIDTH / 2 + 1, boxY + CLOCK_PAD + 1);
+
+        snprintf(buf, sizeof(buf), "%02d", t->tm_min);
+        sprite.drawString(buf, WIDTH / 2 + 1, boxY + CLOCK_PAD + CLOCK_TEXT_H + CLOCK_LINE_GAP);
+      }
+    }
 
     sprite.pushSprite(0, 0);
     sprite.deleteSprite();

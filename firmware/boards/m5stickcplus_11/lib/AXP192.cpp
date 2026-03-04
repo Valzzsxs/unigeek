@@ -3,9 +3,7 @@
 AXP192::AXP192() {}
 
 void AXP192::begin(void) {
-    Wire1.begin(21, 22);
     Wire1.setClock(400000);
-
     // Set LDO2 & LDO3(TFT_LED & TFT) 3.0V
     Write1Byte(0x28, 0xcc);
 

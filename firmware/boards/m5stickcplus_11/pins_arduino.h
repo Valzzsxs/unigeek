@@ -59,10 +59,15 @@ static const uint8_t SCL = GROVE_SCL;
 // ─── Speaker (buzzer, LEDC PWM) ───────────────────────────
 #define SPK_PIN  2
 
-// ─── RTC (PCF8563) ────────────────────────────────────────
+// ─── Internal I2C (AXP192 + BM8563) ───────────────────────
+#define INTERNAL_SDA  21
+#define INTERNAL_SCL  22
+
+// ─── RTC (BM8563) ─────────────────────────────────────────
 #define DEVICE_HAS_RTC
 #define RTC_I2C_ADDR  0x51
-#define RTC_REG_BASE  0x02  // PCF8563: seconds register at 0x02
+#define RTC_REG_BASE  0x02  // BM8563: seconds register at 0x02
+#define RTC_WIRE      Wire1  // shares internal I2C bus with AXP192
 
 // ─── Firmware Feature Flags ───────────────────────────────
 #define DEVICE_HAS_SOUND          // buzzer attached — enables audio paths and sound settings

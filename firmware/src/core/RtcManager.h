@@ -5,6 +5,7 @@
 //   DEVICE_HAS_RTC   — gates the entire implementation
 //   RTC_I2C_ADDR     — 0x51 for both PCF8563 and PCF85063A
 //   RTC_REG_BASE     — 0x02 for PCF8563, 0x04 for PCF85063A
+//   RTC_WIRE         — (optional) TwoWire instance to use; defaults to Wire if not defined
 //
 // Both chips use identical 7-register BCD layout starting at RTC_REG_BASE:
 //   +0 seconds  (mask 0x7F)
@@ -24,6 +25,10 @@
 #include <time.h>
 #include <sys/time.h>
 
+#ifndef RTC_WIRE
+#define RTC_WIRE Wire
+#endif
+
 namespace RtcManager {
 
 static inline uint8_t _bcd2bin(uint8_t v) { return (v >> 4) * 10 + (v & 0x0F); }
@@ -32,19 +37,19 @@ static inline uint8_t _bin2bcd(uint8_t v) { uint8_t h = v / 10; return (h << 4) 
 // Read RTC registers and set ESP32 system clock.
 // Call once after Wire is ready (i.e. after Uni.begin()).
 static inline void syncSystemFromRtc() {
-  Wire.beginTransmission(RTC_I2C_ADDR);
-  Wire.write(RTC_REG_BASE);
-  if (Wire.endTransmission() != 0) return;
-  Wire.requestFrom((uint8_t)RTC_I2C_ADDR, (uint8_t)7);
-  if (Wire.available() < 7) return;
+  RTC_WIRE.beginTransmission(RTC_I2C_ADDR);
+  RTC_WIRE.write(RTC_REG_BASE);
+  if (RTC_WIRE.endTransmission() != 0) return;
+  RTC_WIRE.requestFrom((uint8_t)RTC_I2C_ADDR, (uint8_t)7);
+  if (RTC_WIRE.available() < 7) return;
 
-  uint8_t sec  = _bcd2bin(Wire.read() & 0x7F);
-  uint8_t min  = _bcd2bin(Wire.read() & 0x7F);
-  uint8_t hour = _bcd2bin(Wire.read() & 0x3F);
-  uint8_t day  = _bcd2bin(Wire.read() & 0x3F);
-  Wire.read();  // weekday — skip
-  uint8_t mon  = _bcd2bin(Wire.read() & 0x1F);
-  uint8_t year = _bcd2bin(Wire.read());
+  uint8_t sec  = _bcd2bin(RTC_WIRE.read() & 0x7F);
+  uint8_t min  = _bcd2bin(RTC_WIRE.read() & 0x7F);
+  uint8_t hour = _bcd2bin(RTC_WIRE.read() & 0x3F);
+  uint8_t day  = _bcd2bin(RTC_WIRE.read() & 0x3F);
+  RTC_WIRE.read();  // weekday — skip
+  uint8_t mon  = _bcd2bin(RTC_WIRE.read() & 0x1F);
+  uint8_t year = _bcd2bin(RTC_WIRE.read());
 
   struct tm t = {};
   t.tm_sec   = sec;
@@ -71,16 +76,16 @@ static inline void syncRtcFromSystem() {
 
   struct tm* t = gmtime(&now);
 
-  Wire.beginTransmission(RTC_I2C_ADDR);
-  Wire.write(RTC_REG_BASE);
-  Wire.write(_bin2bcd(t->tm_sec));
-  Wire.write(_bin2bcd(t->tm_min));
-  Wire.write(_bin2bcd(t->tm_hour));
-  Wire.write(_bin2bcd(t->tm_mday));
-  Wire.write((uint8_t)t->tm_wday);
-  Wire.write(_bin2bcd(t->tm_mon + 1));
-  Wire.write(_bin2bcd((uint8_t)(t->tm_year - 100)));  // tm_year is years since 1900; store 0–99 from 2000
-  Wire.endTransmission();
+  RTC_WIRE.beginTransmission(RTC_I2C_ADDR);
+  RTC_WIRE.write(RTC_REG_BASE);
+  RTC_WIRE.write(_bin2bcd(t->tm_sec));
+  RTC_WIRE.write(_bin2bcd(t->tm_min));
+  RTC_WIRE.write(_bin2bcd(t->tm_hour));
+  RTC_WIRE.write(_bin2bcd(t->tm_mday));
+  RTC_WIRE.write((uint8_t)t->tm_wday);
+  RTC_WIRE.write(_bin2bcd(t->tm_mon + 1));
+  RTC_WIRE.write(_bin2bcd((uint8_t)(t->tm_year - 100)));  // tm_year is years since 1900; store 0–99 from 2000
+  RTC_WIRE.endTransmission();
 }
 
 }  // namespace RtcManager

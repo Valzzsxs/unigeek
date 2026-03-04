@@ -36,9 +36,6 @@ public:
 
   void onUpdate() override
   {
-    uint8_t eff = _effectiveCount();
-    if (eff == 0) return;
-
     if (Uni.Nav->wasPressed())
     {
       auto dir = Uni.Nav->readDirection();
@@ -48,7 +45,11 @@ public:
         onBack();
         return;
       }
-      else if (dir == INavigation::DIR_UP)
+
+      uint8_t eff = _effectiveCount();
+      if (eff == 0) return;
+
+      if (dir == INavigation::DIR_UP)
       {
         _selectedIndex = (_selectedIndex == 0) ? eff - 1 : _selectedIndex - 1;
         _scrollIfNeeded();
@@ -92,12 +93,18 @@ public:
   void onRender() override
   {
     uint8_t eff = _effectiveCount();
-    if (eff == 0) return;
 
     auto& lcd = Uni.Lcd;
     TFT_eSprite sprite(&lcd);
     sprite.createSprite(bodyW(), bodyH());
     sprite.fillSprite(TFT_BLACK);
+
+    if (eff == 0) {
+      sprite.pushSprite(bodyX(), bodyY());
+      sprite.deleteSprite();
+      return;
+    }
+
     sprite.setTextDatum(TL_DATUM);
 
     uint8_t visible = bodyH() / ITEM_H;

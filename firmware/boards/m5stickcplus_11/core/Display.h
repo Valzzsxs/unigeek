@@ -3,7 +3,7 @@
 //
 #pragma once
 
-#include <AXP192.h>
+#include "lib/AXP192.h"
 #include "core/IDisplay.h"
 
 class DisplayImpl : public IDisplay

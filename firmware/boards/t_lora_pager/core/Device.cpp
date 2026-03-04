@@ -11,6 +11,7 @@
 #include "Keyboard.h"
 #include "Speaker.h"
 #include <SPI.h>
+#include <Wire.h>
 
 static DisplayImpl    display;
 static KeyboardImpl   keyboard;
@@ -42,6 +43,7 @@ void Device::setupIo()
 }
 
 Device* Device::createInstance() {
+  Wire.begin(GROVE_SDA, GROVE_SCL);  // I2C: keyboard, RTC, sensor, audio
   sharedSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
   storageLFS.begin();
   storageSD.begin(SD_CS, sharedSpi);
