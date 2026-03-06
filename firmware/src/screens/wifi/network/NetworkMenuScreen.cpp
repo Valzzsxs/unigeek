@@ -127,7 +127,7 @@ void NetworkMenuScreen::_connectToSelected(uint8_t index) {
   if (saved.length() > 0 && _connect(bssid, ssid, saved.c_str())) return;
 
   String password = InputTextAction::popup(ssid);
-  if (password.length() == 0) return;
+  if (password.length() == 0) { render(); return; }
 
   if (!_connect(bssid, ssid, password.c_str())) {
     ShowStatusAction::show("Connection Failed!", 1500);
