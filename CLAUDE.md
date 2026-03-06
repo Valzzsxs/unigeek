@@ -60,7 +60,7 @@ All hardware differences are isolated in board-specific folders.
     │   │   ├── boards.ini
     │   │   ├── Device.cpp          createInstance() + boardHook() (empty)
     │   │   ├── Display.h
-    │   │   ├── Navigation.h        rotary encoder + keyboard \b=BACK; takes IKeyboard* in constructor
+    │   │   ├── Navigation.h        rotary encoder + keyboard \b=BACK \n=PRESS; takes IKeyboard* in constructor
     │   │   ├── Navigation.cpp      ISR in .cpp (IRAM_ATTR requirement)
     │   │   ├── Keyboard.h          TCA8418 3-layer keymap (fn/shift/caps)
     │   │   ├── Keyboard.cpp        ISR in .cpp
@@ -326,6 +326,7 @@ All hardware differences are isolated in board-specific folders.
 
     String      InputTextAction::popup("Title")
     String      InputTextAction::popup("Title", "default")
+    String      InputTextAction::popup("Title", "default", true)   // numberMode: digits and dot only
     int         InputNumberAction::popup("Title")
     int         InputNumberAction::popup("Title", 0, 100, 50)
     const char* InputSelectAction::popup("Title", opts, count)
@@ -336,6 +337,19 @@ All hardware differences are isolated in board-specific folders.
     // Long messages are automatically word-wrapped (max 5 lines, box grows to fit)
     // InputSelectAction: DIR_BACK dismisses overlay and returns nullptr
     // InputTextAction / InputNumberAction: DIR_BACK deletes last character (keyboard mode)
+    // InputTextAction numberMode=true: scroll mode shows 0-9 and . sets with SAVE/DEL/CANCEL only (no CAPS/SYM)
+    //                                  keyboard mode filters input to digits and . only
+
+    // After any popup, the calling screen is responsible for calling render() to restore itself.
+    // Actions only wipe their overlay area — they do NOT trigger a screen re-render.
+    // Pattern: always call render() (or a method that calls it) after a popup returns,
+    //          even on cancel, unless the next line navigates to a different screen.
+    //
+    // Example:
+    //   String ip = InputTextAction::popup("Target IP", _lastIp, true);
+    //   render();                   // restore screen after wipe (even if cancelled)
+    //   if (ip.isEmpty()) return;
+    //   // ... proceed
 
 ### Storage
 

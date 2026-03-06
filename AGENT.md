@@ -139,6 +139,7 @@ Always null-check before using — Uni.StorageSD is nullptr on M5StickC.
 All actions are blocking static calls that return a value:
 
     String      result = InputTextAction::popup("Title");
+    String      result = InputTextAction::popup("Title", "default", true);  // numberMode: digits + dot only
     int         result = InputNumberAction::popup("Title", min, max, default);
     const char* result = InputSelectAction::popup("Title", opts, count, default);
     void               ShowStatusAction::show("Message", durationMs);
@@ -148,7 +149,15 @@ For ShowStatusAction:
 - durationMs =  0  show and return immediately, no wipe
 - durationMs > 0   block for that duration then wipe
 
-All actions wipe their overlay area on close.
+All actions wipe their overlay area on close. They do NOT re-render the screen.
+The calling screen is responsible for calling render() after a popup returns — including on cancel.
+Exception: if the very next line navigates to a different screen, render() is not needed.
+
+    // Correct pattern:
+    String ip = InputTextAction::popup("Target IP", _lastIp, true);
+    render();                   // always restore screen after overlay wipe
+    if (ip.isEmpty()) return;
+    // ... proceed with ip
 
 ---
 
