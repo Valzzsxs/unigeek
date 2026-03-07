@@ -50,19 +50,29 @@ public:
   void update() override {
     if (_available) return;
 
-    // wait for all keys released before accepting next key
+    // wait for all non-modifier keys released before accepting next key
     if (_waitRelease) {
+      bool anyNonMod = false;
       for (int i = 0; i < 8; i++) {
         _setOutput(i);
-        if (_readInput()) { _setOutput(0); return; }
+        uint8_t bits = _readInput();
+        if (!bits) continue;
+        uint8_t yf = 3 - ((i > 3) ? (i - 4) : i);
+        bool    x1 = (i > 3);
+        for (int j = 0; j < 7; j++) {
+          if (!(bits & (1 << j))) continue;
+          uint8_t x = x1 ? _KB_X1[j] : _KB_X2[j];
+          if (_KB_MAP[yf][x].n != '\0') anyNonMod = true;
+        }
       }
       _setOutput(0);
+      if (anyNonMod) return;
       _waitRelease = false;
     }
 
-    bool shiftSeen = false;
+    bool shiftSeen = false, fnSeen = false, ctrlSeen = false, altSeen = false, optSeen = false;
 
-    // first pass: detect shift
+    // first pass: detect modifiers
     for (int i = 0; i < 8; i++) {
       _setOutput(i);
       uint8_t bits = _readInput();
@@ -72,10 +82,18 @@ public:
       for (int j = 0; j < 7; j++) {
         if (!(bits & (1 << j))) continue;
         uint8_t x = x1 ? _KB_X1[j] : _KB_X2[j];
-        if (yf == 2 && x == 1) shiftSeen = true; // SHIFT key
+        if (yf == 2 && x == 0) fnSeen    = true;
+        if (yf == 2 && x == 1) shiftSeen = true;
+        if (yf == 3 && x == 0) ctrlSeen  = true;
+        if (yf == 3 && x == 1) optSeen   = true;
+        if (yf == 3 && x == 2) altSeen   = true;
       }
     }
     _shift = shiftSeen;
+    _fn    = fnSeen;
+    _ctrl  = ctrlSeen;
+    _alt   = altSeen;
+    _opt   = optSeen;
 
     // second pass: resolve char
     for (int i = 0; i < 8; i++) {
@@ -101,6 +119,15 @@ public:
 
   bool available() override { return _available; }
   char peekKey()   override { return _key; }
+  uint8_t modifiers() override {
+    uint8_t m = MOD_NONE;
+    if (_shift) m |= MOD_SHIFT;
+    if (_fn)    m |= MOD_FN;
+    if (_ctrl)  m |= MOD_CTRL;
+    if (_alt)   m |= MOD_ALT;
+    if (_opt)   m |= MOD_OPT;
+    return m;
+  }
 
   char getKey() override {
     _available   = false;
@@ -112,6 +139,10 @@ private:
   char _key        = 0;
   bool _available  = false;
   bool _shift      = false;
+  bool _fn         = false;
+  bool _ctrl       = false;
+  bool _alt        = false;
+  bool _opt        = false;
   bool _waitRelease = false;
 
   void _setOutput(int i) {

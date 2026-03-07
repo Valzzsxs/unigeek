@@ -69,7 +69,11 @@ public:
 
     char n = _ADV_KB_MAP[row][col].n;
 
+    if (row == 2 && col == 0) { _fn   = pressed; return; }
     if (row == 2 && col == 1) { _shift = pressed; return; }
+    if (row == 3 && col == 0) { _ctrl  = pressed; return; }
+    if (row == 3 && col == 1) { _opt   = pressed; return; }
+    if (row == 3 && col == 2) { _alt   = pressed; return; }
     if (!pressed) return;
     if (n == '\0') return;
 
@@ -79,6 +83,15 @@ public:
 
   bool available() override { return _available; }
   char peekKey()   override { return _key; }
+  uint8_t modifiers() override {
+    uint8_t m = MOD_NONE;
+    if (_shift) m |= MOD_SHIFT;
+    if (_fn)    m |= MOD_FN;
+    if (_ctrl)  m |= MOD_CTRL;
+    if (_alt)   m |= MOD_ALT;
+    if (_opt)   m |= MOD_OPT;
+    return m;
+  }
 
   char getKey() override {
     _available = false;
@@ -89,5 +102,9 @@ private:
   char _key       = 0;
   bool _available = false;
   bool _shift     = false;
+  bool _fn        = false;
+  bool _ctrl      = false;
+  bool _alt       = false;
+  bool _opt       = false;
   bool _ready     = false;
 };

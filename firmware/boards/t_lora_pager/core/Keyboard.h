@@ -131,6 +131,14 @@ public:
   bool available() override { return _available; }
   char peekKey()   override { return _key; }
 
+  uint8_t modifiers() override {
+    uint8_t m = MOD_NONE;
+    if (_shiftHeld ^ _capsLock) m |= MOD_SHIFT;
+    if (_fnPressed)             m |= MOD_FN;
+    if (_capsLock)              m |= MOD_CAPS;
+    return m;
+  }
+
   char getKey() override {
     char k     = _key;
     _key       = 0;
