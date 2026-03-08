@@ -309,7 +309,7 @@ void GameWordleScreen::_renderPlay()
       char hc     = hasEntry ? _history[row][ci] : '\0';
       int  color  = hasEntry ? _colorGuess(ci, hc) : 0;
 
-      uint16_t bg = (_showColors() && hasEntry) ? kColors[color] : TFT_DARKGREY;
+      uint16_t bg = hasEntry ? kColors[color] : TFT_DARKGREY;
       sp.fillRoundRect(x, y, cellW, cellH, 2, bg);
       if (hc != '\0') {
         char buf[2] = {hc, '\0'};

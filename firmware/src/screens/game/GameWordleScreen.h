@@ -47,7 +47,6 @@ private:
   // Helpers
   const char* _diffStr()    const;
   int         _maxAttempts() const;
-  bool        _showColors()  const { return _difficulty < 2; }
   int         _colorGuess(uint8_t idx, char c) const;
 
   void _initGame();
