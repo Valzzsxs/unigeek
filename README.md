@@ -9,7 +9,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 | Device | Keyboard | Speaker | USB HID | SD Card | Power Off |
 |--------|----------|---------|---------|---------|-----------|
 | M5StickC Plus 1.1 | — | Buzzer | — | — | Yes |
-| LilyGO T-Lora Pager | TCA8418 | I2S | Yes | Yes | — |
+| LilyGO T-Lora Pager | TCA8418 | I2S | Yes | Yes | Yes |
 | M5Stack Cardputer | GPIO Matrix | I2S | Yes | Yes | — |
 | M5Stack Cardputer ADV | TCA8418 | I2S + ES8311 | Yes | Yes | — |
 
@@ -48,6 +48,12 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - Color-coded feedback: green = correct position, orange = wrong position, red = not in code
   - 4 difficulty levels: Easy (14 attempts, 3 min), Medium (7 attempts, 90 sec), Hard (unlimited, 3 min), Extreme (unlimited, 90 sec)
   - Keyboard devices type directly; non-keyboard devices cycle characters with UP/DOWN and use the `<` erase option
+- **Wordle** — Classic word-guessing game in English and Indonesian
+  - Guess a 5-letter word in up to 10 attempts
+  - Color-coded feedback: green = correct position, orange = wrong position, red = not in word
+  - 3 difficulty levels: Easy (10 attempts, colors + alphabet hint), Medium (7 attempts, colors), Hard (7 attempts, no colors)
+  - Choose between Common (curated) or Full word database
+  - Available in English (EN) and Indonesian (ID)
 
 ### Settings
 - Device name
