@@ -27,7 +27,6 @@ public:
   void begin()
   {
     Lcd.begin();
-    Lcd.setBrightness(80);
     Lcd.setRotation(TFT_DEFAULT_ORIENTATION);
     Lcd.invertDisplay(true);
 
@@ -35,7 +34,7 @@ public:
     Nav->begin();
 
     if (Keyboard) Keyboard->begin();
-    if (Speaker)    Speaker->begin();
+    if (Speaker)  Speaker->begin();
   }
 
   void update()

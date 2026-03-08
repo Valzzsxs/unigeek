@@ -13,6 +13,39 @@ void _checkStorageFallback() {
     Uni.Storage = Uni.StorageLFS;
 }
 
+void _bootSplash() {
+  auto& lcd = Uni.Lcd;
+  uint16_t w = lcd.width();
+  uint16_t h = lcd.height();
+
+  lcd.fillScreen(TFT_BLACK);
+
+  lcd.setTextDatum(MC_DATUM);
+  lcd.setTextSize(3);
+  lcd.setTextColor(Config.getThemeColor());
+  lcd.drawString("UniGeek", w / 2, h / 2 - 14);
+
+  // Version
+  lcd.setTextSize(1);
+  lcd.setTextColor(TFT_DARKGREY);
+  lcd.drawString(__DATE__, w / 2, h / 2 + 10);
+
+  // Loading bar
+  uint16_t barW = w / 2;
+  uint16_t barH = 4;
+  uint16_t barX = (w - barW) / 2;
+  uint16_t barY = h / 2 + 28;
+  lcd.drawRoundRect(barX, barY, barW, barH, 1, TFT_DARKGREY);
+
+  for (int i = 0; i <= barW - 2; i++) {
+    lcd.fillRect(barX + 1, barY + 1, i, barH - 2, Config.getThemeColor());
+    delay(10);
+  }
+
+  if (Uni.Speaker) Uni.Speaker->playWin();
+  delay(300);
+}
+
 void setup() {
   Serial.begin(115200);
   Uni.begin();
@@ -24,6 +57,7 @@ void setup() {
   Uni.applyNavMode();
   Uni.Lcd.setBrightness((uint8_t)Config.get(APP_CONFIG_BRIGHTNESS, APP_CONFIG_BRIGHTNESS_DEFAULT).toInt());
   if (Uni.Speaker) Uni.Speaker->setVolume((uint8_t)Config.get(APP_CONFIG_VOLUME, APP_CONFIG_VOLUME_DEFAULT).toInt());
+  _bootSplash();
   Screen.setScreen(new MainMenuScreen());
 }
 
