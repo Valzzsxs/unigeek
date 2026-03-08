@@ -41,7 +41,6 @@ static const uint8_t kSnapSig[8]  = {0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x88, 0
 static constexpr uint16_t kKiAck     = 0x0080;
 static constexpr uint16_t kKiMic     = 0x0100;
 static constexpr uint16_t kKiInstall = 0x0040;
-static constexpr uint16_t kKiSecure  = 0x0200;
 
 // ── File-scope helpers ────────────────────────────────────────────────────
 
@@ -89,13 +88,22 @@ WifiEapolBruteForceScreen::~WifiEapolBruteForceScreen() {
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
+static String _truncSub(const char* name) {
+  int len = strlen(name);
+  if (len <= 14) return String(name);
+  return String("..") + String(name + len - 12);
+}
+
 void WifiEapolBruteForceScreen::_showMenu() {
   _state = STATE_MENU;
 
   const char* pcapBase = strrchr(_selectedPcap, '/');
-  _pcapSub     = (_selectedPcap[0]     ? String(pcapBase ? pcapBase + 1 : _selectedPcap)     : "(not selected)");
-  const char* wlBase  = strrchr(_selectedWordlist, '/');
-  _wordlistSub = (_selectedWordlist[0] ? String(wlBase   ? wlBase   + 1 : _selectedWordlist) : "(not selected)");
+  const char* wlBase   = strrchr(_selectedWordlist, '/');
+  const char* pcapName = pcapBase ? pcapBase + 1 : _selectedPcap;
+  const char* wlName   = wlBase   ? wlBase   + 1 : _selectedWordlist;
+
+  _pcapSub     = _selectedPcap[0]     ? _truncSub(pcapName) : "(not selected)";
+  _wordlistSub = _selectedWordlist[0] ? _truncSub(wlName)   : "(not selected)";
 
   _menuItems[0] = {"PCAP File", _pcapSub.c_str()};
   _menuItems[1] = {"Wordlist",  _wordlistSub.c_str()};
@@ -192,7 +200,7 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
       }
       ShowStatusAction::show("Parsing PCAP...", 0);
       if (!_parsePcap(_selectedPcap)) {
-        ShowStatusAction::show("No valid handshake\nin PCAP file.");
+        ShowStatusAction::show("Handshake incomplete.\nM2 (SNonce) missing.\nRecapture needed.");
         render();
         return;
       }
@@ -254,6 +262,25 @@ bool WifiEapolBruteForceScreen::_listFiles(const char* dir, const char* ext) {
 
 // ── PCAP parser ───────────────────────────────────────────────────────────
 
+// Helper: parse one 802.11 EAPOL-Key frame; returns pointer to key descriptor or nullptr.
+// Writes eapol ptr, total len, ki into out params.
+static const uint8_t* _parseEapolKey(const uint8_t* frm, uint16_t flen,
+                                      const uint8_t** eapolOut, uint16_t* totalOut) {
+  if (flen < 24) return nullptr;
+  const uint16_t fc = (uint16_t)frm[0] | ((uint16_t)frm[1] << 8);
+  if (((fc & 0x000C) >> 2) != 2) return nullptr;  // not data frame
+  int snap = findSnap(frm, flen);
+  if (snap < 0 || (uint16_t)(snap + 9) >= flen) return nullptr;
+  const uint8_t* eapol = frm + snap + 8;
+  if (eapol[1] != 0x03) return nullptr;
+  uint16_t eap_len = ((uint16_t)eapol[2] << 8) | eapol[3];
+  uint16_t total   = 4 + eap_len;
+  if ((uint16_t)(snap + 8) + total > flen || total < 100) return nullptr;
+  *eapolOut = eapol;
+  *totalOut = total;
+  return eapol + 4;  // key descriptor
+}
+
 bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
   Handshake& hs = _ctx.hs;
   memset(&hs, 0, sizeof(hs));
@@ -264,45 +291,44 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
   // Global header (24 bytes)
   uint8_t gh[24];
   if (f.read(gh, 24) != 24) { f.close(); return false; }
-  // Verify LE pcap magic D4 C3 B2 A1
   if (!(gh[0] == 0xD4 && gh[1] == 0xC3 && gh[2] == 0xB2 && gh[3] == 0xA1)) {
     f.close(); return false;
   }
-  // Link type: bytes 20-23 (LE). 105 = raw 802.11, 127 = radiotap+802.11
   uint32_t linktype = (uint32_t)gh[20] | ((uint32_t)gh[21] << 8) |
                       ((uint32_t)gh[22] << 16) | ((uint32_t)gh[23] << 24);
 
   uint8_t rec[512];
-  bool    gotM1 = false, gotM2 = false;
-  uint64_t replayM1 = 0;
+
+  // Helper lambda-like macro: read one pcap record into rec[], strip radiotap.
+  // Sets frm/flen. Skips oversized records. Returns false when file exhausted.
+  #define READ_FRAME(frm, flen) \
+    uint32_t _ts, _tu, _incl, _orig; \
+    if (!pcapRead32(f,_ts)||!pcapRead32(f,_tu)||!pcapRead32(f,_incl)||!pcapRead32(f,_orig)) break; \
+    if (!_incl || _incl > sizeof(rec)) { f.seek(f.position()+_incl); continue; } \
+    if (f.read(rec, _incl) != (int)_incl) break; \
+    uint16_t _off = 0; \
+    if (linktype == 127) { \
+      if (_incl < 4) continue; \
+      _off = (uint16_t)rec[2] | ((uint16_t)rec[3] << 8); \
+      if (_off >= _incl) continue; \
+    } \
+    const uint8_t* frm  = rec + _off; \
+    uint16_t       flen = (uint16_t)(_incl - _off);
+
+  // ── Pass 1: collect SSID from beacon; collect best ANonce from M1 or M3 ──
+  // M3's Nonce field == M1's ANonce (AP reuses same ANonce throughout exchange).
+  // Always overwrite with the latest M1/M3 so we end up with the most recent pair.
+  bool gotAnonce = false;
 
   while (f.available() > 16) {
-    uint32_t ts, tu, incl, orig;
-    if (!pcapRead32(f, ts) || !pcapRead32(f, tu) ||
-        !pcapRead32(f, incl) || !pcapRead32(f, orig)) break;
+    READ_FRAME(frm, flen)
 
-    if (!incl || incl > sizeof(rec)) { f.seek(f.position() + incl); continue; }
-    if (f.read(rec, incl) != (int)incl) break;
+    const uint16_t fc    = (uint16_t)frm[0] | ((uint16_t)frm[1] << 8);
+    const uint8_t  fcTyp = (fc & 0x000C) >> 2;
+    const uint8_t  fcSub = (fc & 0x00F0) >> 4;
 
-    // Strip radiotap header for link type 127
-    uint16_t off = 0;
-    if (linktype == 127) {
-      if (incl < 4) continue;
-      uint16_t rtLen = (uint16_t)rec[2] | ((uint16_t)rec[3] << 8);
-      if (rtLen >= incl) continue;
-      off = rtLen;
-    }
-
-    const uint8_t* frm  = rec + off;
-    uint16_t       flen = (uint16_t)(incl - off);
-    if (flen < 24) continue;
-
-    const uint16_t fc     = (uint16_t)frm[0] | ((uint16_t)frm[1] << 8);
-    const uint8_t  fcType = (fc & 0x000C) >> 2;
-    const uint8_t  fcSub  = (fc & 0x00F0) >> 4;
-
-    // Beacon → extract SSID (only once, first seen)
-    if (fcType == 0 && fcSub == 8 && flen >= 36 && hs.ssid[0] == '\0') {
+    // Beacon — grab SSID
+    if (fcTyp == 0 && fcSub == 8 && flen >= 36 && hs.ssid[0] == '\0') {
       uint16_t pos = 36;
       while (pos + 2 <= flen) {
         uint8_t id = frm[pos], elen = frm[pos + 1];
@@ -310,7 +336,7 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
         if (id == 0 && elen > 0 && elen <= 32) {
           memcpy(hs.ssid, frm + pos + 2, elen);
           hs.ssid[elen] = '\0';
-          hs.ssid_len   = elen;
+          hs.ssid_len   = (uint8_t)elen;
           break;
         }
         pos += 2 + elen;
@@ -318,67 +344,74 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
       continue;
     }
 
-    // Only process data frames for EAPOL
-    if (fcType != 2) continue;
+    // EAPOL — look for M1 (ack, !mic) or M3 (ack, mic, inst) as ANonce source
+    const uint8_t* eapol; uint16_t total;
+    const uint8_t* key = _parseEapolKey(frm, flen, &eapol, &total);
+    if (!key) continue;
+    uint16_t ki   = ((uint16_t)key[1] << 8) | key[2];
+    bool     ack  = ki & kKiAck;
+    bool     mic  = ki & kKiMic;
+    bool     inst = ki & kKiInstall;
 
-    int snap = findSnap(frm, flen);
-    if (snap < 0) continue;
-    if ((uint16_t)(snap + 9) >= flen) continue;
-
-    const uint8_t* eapol = frm + snap + 8;
-    if (eapol[1] != 0x03) continue;  // not EAPOL-Key
-
-    uint16_t eap_len = ((uint16_t)eapol[2] << 8) | eapol[3];
-    uint16_t total   = 4 + eap_len;
-    if ((uint16_t)(snap + 8) + total > flen) continue;
-
-    const uint8_t* key    = eapol + 4;
-    uint16_t       ki     = ((uint16_t)key[1] << 8) | key[2];
-    bool           ack    = ki & kKiAck;
-    bool           mic    = ki & kKiMic;
-    bool           inst   = ki & kKiInstall;
-    bool           sec    = ki & kKiSecure;
-    uint8_t        keyver = ki & 7;
-
-    uint64_t replay = 0;
-    for (int i = 0; i < 8; i++) replay = (replay << 8) | key[5 + i];
-
-    // M1: ACK=1, MIC=0 — AP sends ANonce
-    if (!gotM1 && ack && !mic) {
-      memcpy(hs.ap,     frm + 10, 6);  // addr2 = AP source
-      memcpy(hs.sta,    frm + 4,  6);  // addr1 = STA dest
+    if (ack && (!mic || inst)) {  // M1 (!mic) or M3 (inst)
+      memcpy(hs.ap,     frm + 10, 6);   // addr2 = AP (transmitter)
+      memcpy(hs.sta,    frm + 4,  6);   // addr1 = STA (receiver)
       memcpy(hs.anonce, key + 13, 32);
-      replayM1 = replay;
-      gotM1    = true;
-      continue;
+      gotAnonce = true;
+      // Don't break — keep scanning so the LAST M1/M3 wins
     }
+  }
 
-    // M2: ACK=0, MIC=1, INSTALL=0, SECURE=0 — STA sends SNonce + MIC
-    if (!gotM2 && !ack && mic && !inst && !sec && keyver >= 1 && keyver <= 3) {
-      if (!gotM1) continue;
-      if (replay != replayM1) continue;
-      // Verify matching MACs: addr2=STA, addr1=AP
-      if (memcmp(frm + 10, hs.sta, 6) != 0) continue;
-      if (memcmp(frm + 4,  hs.ap,  6) != 0) continue;
+  if (!gotAnonce) { f.close(); return false; }
+
+  // ── Pass 2: find M2 whose MACs match the AP/STA recorded in pass 1 ───────
+  // Works regardless of whether M2 appears before or after M3 in the file.
+  f.seek(24);
+  bool gotM2 = false;
+
+  while (f.available() > 16) {
+    READ_FRAME(frm2, flen2)
+
+    const uint8_t* eapol; uint16_t total;
+    const uint8_t* key = _parseEapolKey(frm2, flen2, &eapol, &total);
+    if (!key) continue;
+    uint16_t ki   = ((uint16_t)key[1] << 8) | key[2];
+    bool     ack  = ki & kKiAck;
+    bool     mic  = ki & kKiMic;
+    bool     inst = ki & kKiInstall;
+
+    if (!ack && mic && !inst) {
+      // Reject M4: SNonce is all-zeros in M4
+      bool nonceZero = true;
+      for (int z = 0; z < 32 && nonceZero; z++) nonceZero = (key[13 + z] == 0);
+      if (nonceZero) continue;
+      // Must be from the STA → AP direction matching our pass-1 pair
+      if (memcmp(frm2 + 10, hs.sta, 6) != 0) continue;  // addr2=STA source
+      if (memcmp(frm2 + 4,  hs.ap,  6) != 0) continue;  // addr1=AP dest
 
       memcpy(hs.snonce, key + 13, 32);
       memcpy(hs.mic,    eapol + 81, 16);
       if (total <= sizeof(hs.eapol)) {
         memcpy(hs.eapol, eapol, total);
-        memset(hs.eapol + 81, 0, 16);  // zero MIC field for recomputation
+        memset(hs.eapol + 81, 0, 16);
         hs.eapol_len = total;
       }
       gotM2 = true;
+      break;
     }
   }
+
+  #undef READ_FRAME
   f.close();
 
-  if (!(gotM1 && gotM2)) return false;
+  if (!gotM2) return false;
 
-  // If SSID missing from beacon, try extracting from filename (BSSID_SSID.pcap)
+  // SSID fallback: extract from filename (BSSID_SSID.pcap).
+  // The sanitizer preserves '.' so "local.icon" stays as-is in the filename.
   if (hs.ssid[0] == '\0') {
     String p   = String(path);
-    int    und = p.lastIndexOf('_');
+    int    sl  = p.lastIndexOf('/');
+    int    und = p.indexOf('_', sl >= 0 ? sl + 1 : 0);  // first _ after last /
     int    dot = p.lastIndexOf('.');
     if (und >= 0 && dot > und + 1) {
       String part = p.substring(und + 1, dot);
@@ -388,7 +421,7 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
     if (hs.ssid[0] == '\0') return false;
   }
 
-  // Build prf_data[76]: min(AP,STA) || max(AP,STA) || min(ANonce,SNonce) || max(ANonce,SNonce)
+  // Build prf_data[76]: min(AP,STA)||max(AP,STA)||min(ANonce,SNonce)||max(ANonce,SNonce)
   uint8_t* p = hs.prf_data;
   if (memcmp(hs.ap, hs.sta, 6) < 0) {
     memcpy(p, hs.ap,  6); p += 6; memcpy(p, hs.sta, 6); p += 6;

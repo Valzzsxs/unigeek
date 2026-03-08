@@ -12,8 +12,9 @@
 const char* WifiEapolCaptureScreen::SAVE_DIR = "/unigeek/wifi/eapol";
 
 WifiEapolCaptureScreen::RawCapture WifiEapolCaptureScreen::_ring[WifiEapolCaptureScreen::RING_SIZE] = {};
-volatile int WifiEapolCaptureScreen::_ringHead = 0;
-volatile int WifiEapolCaptureScreen::_ringTail = 0;
+volatile int  WifiEapolCaptureScreen::_ringHead    = 0;
+volatile int  WifiEapolCaptureScreen::_ringTail    = 0;
+volatile bool WifiEapolCaptureScreen::_skipBeacons = false;
 
 WifiEapolCaptureScreen::ApTarget WifiEapolCaptureScreen::_apTargets[WifiEapolCaptureScreen::MAX_TARGETS] = {};
 int WifiEapolCaptureScreen::_apCount = 0;
@@ -62,6 +63,7 @@ struct PcapPktHdr {
 // ── Destructor ────────────────────────────────────────────────────────────
 
 WifiEapolCaptureScreen::~WifiEapolCaptureScreen() {
+  _skipBeacons = false;
   esp_wifi_set_promiscuous_rx_cb(nullptr);
   esp_wifi_set_promiscuous(false);
   if (_attacker) {
@@ -90,10 +92,11 @@ void WifiEapolCaptureScreen::_pushLog(const char* msg, uint16_t color) {
 // ── Lifecycle ─────────────────────────────────────────────────────────────
 
 void WifiEapolCaptureScreen::onInit() {
-  _channel          = 1;
+  _channel          = 0;
   _needRefresh      = false;
   _ringHead         = 0;
   _ringTail         = 0;
+  _skipBeacons      = false;
   _apCount          = 0;
   _logHead          = 0;
   _logCount         = 0;
@@ -163,6 +166,7 @@ void WifiEapolCaptureScreen::onUpdate() {
         _buildAttackChans();
         if (_attackChanCount > 0) {
           _phase        = PHASE_ATTACK;
+          _skipBeacons  = true;   // stop beacons from evicting EAPOL in ring
           _attackChanIdx = 0;
           _pushLog("Attacking APs...", TFT_WHITE);
           _hopToAttackChan();
@@ -197,10 +201,11 @@ void WifiEapolCaptureScreen::onUpdate() {
         _buildAttackChans();
         if (_attackChanCount == 0) {
           _phase          = PHASE_DISCOVERY;
+          _skipBeacons    = false;  // re-enable beacons to discover new APs
           _discoveryCount = 0;
           _channel        = 0;
           _chanDwellUntil = now;
-          _pushLog("All captured, rescanning", TFT_WHITE);
+          _pushLog("Done, rescanning...", TFT_WHITE);
           render();
         }
       }
@@ -287,6 +292,7 @@ void WifiEapolCaptureScreen::_buildAttackChans() {
     memcpy(mac.data(), _apTargets[i].bssid, 6);
     auto it = _eapolMap.find(mac);
     if (it != _eapolMap.end() && it->second.hasM1 && it->second.hasM2) continue;
+    if (_apTargets[i].deauthCount >= MAX_DEAUTH_ATTEMPTS) continue;  // exhausted
 
     uint8_t ch = _apTargets[i].channel;
     bool dup = false;
@@ -339,10 +345,12 @@ void WifiEapolCaptureScreen::_sendDeauth(int ch) {
     memcpy(mac.data(), _apTargets[i].bssid, 6);
     auto it = _eapolMap.find(mac);
     if (it != _eapolMap.end() && it->second.hasM1 && it->second.hasM2) continue;
+    if (_apTargets[i].deauthCount >= MAX_DEAUTH_ATTEMPTS) continue;
 
-    for (int b = 0; b < 5; b++) {
+    for (int b = 0; b < 20; b++) {
       _attacker->deauthenticate(_apTargets[i].bssid, (uint8_t)ch);
     }
+    _apTargets[i].deauthCount++;
     deauthed++;
   }
 
@@ -376,7 +384,7 @@ std::string WifiEapolCaptureScreen::_sanitize(const std::string& s) {
   out.reserve(s.size());
   for (char c : s) {
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
-        (c >= '0' && c <= '9') || c == '-') {
+        (c >= '0' && c <= '9') || c == '-' || c == '.') {
       out += c;
     } else {
       out += '_';
@@ -599,6 +607,7 @@ void IRAM_ATTR WifiEapolCaptureScreen::_promiscuousCb(void* buf, wifi_promiscuou
 
   // ── Beacon (management type=0, subtype=8) ─────────────────────────────
   if (fcType == 0 && fcSub == 8 && len >= 36) {
+    if (_skipBeacons) return;  // attack phase: keep ring free for EAPOL
     int next = (_ringHead + 1) % RING_SIZE;
     if (next == _ringTail) return;
 

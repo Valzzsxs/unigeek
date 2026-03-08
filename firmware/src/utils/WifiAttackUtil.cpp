@@ -8,7 +8,7 @@ extern "C" int ieee80211_raw_frame_sanity_check(int32_t arg, int32_t arg2, int32
 
 WifiAttackUtil::WifiAttackUtil()
 {
-  WiFi.mode(WIFI_MODE_AP);
+  WiFi.mode(WIFI_MODE_APSTA);
   WiFi.softAP("No Internet", "12345678", 1, true);
 }
 
@@ -22,8 +22,8 @@ WifiAttackUtil::~WifiAttackUtil()
 
 esp_err_t WifiAttackUtil::_changeChannel(const uint8_t channel) noexcept
 {
-  if (_currentChannel == channel) return ESP_OK;
-  _currentChannel = channel;
+  // Always set channel — external code (e.g. promiscuous scan) may change it
+  // behind our back, making any cached value stale
   return esp_wifi_set_channel(channel, WIFI_SECOND_CHAN_NONE);
 }
 

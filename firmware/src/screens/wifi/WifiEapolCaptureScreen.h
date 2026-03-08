@@ -50,7 +50,7 @@ public:
   };
 
   // Ring buffer for ISR → main loop communication (lock-free SPSC)
-  static constexpr int RING_SIZE = 8;
+  static constexpr int RING_SIZE = 16;
   static constexpr int MAX_FRAME = 400;
 
   struct RawCapture {
@@ -61,9 +61,10 @@ public:
     bool     isBeacon;
   };
 
-  static RawCapture   _ring[RING_SIZE];
-  static volatile int _ringHead;   // producer (ISR)
-  static volatile int _ringTail;   // consumer (main loop)
+  static RawCapture        _ring[RING_SIZE];
+  static volatile int      _ringHead;        // producer (ISR)
+  static volatile int      _ringTail;        // consumer (main loop)
+  static volatile bool     _skipBeacons;     // true during attack phase — keeps ring free for EAPOL
 
   static std::unordered_map<MacAddr, EapolEntry,  MacHash, MacEqual> _eapolMap;
   static std::unordered_map<MacAddr, std::string, MacHash, MacEqual> _ssidMap;
@@ -77,6 +78,7 @@ public:
   struct ApTarget {
     uint8_t bssid[6];
     uint8_t channel;
+    uint8_t deauthCount = 0;  // number of deauth bursts sent to this AP
   };
   static constexpr int MAX_TARGETS = 20;
   static ApTarget _apTargets[MAX_TARGETS];
@@ -86,6 +88,7 @@ public:
 
 private:
   static constexpr int      MAX_PENDING        = 8;       // max buffered EAPOL frames per AP before SSID known
+  static constexpr int      MAX_DEAUTH_ATTEMPTS = 20;     // deauth bursts per AP before giving up and rescanning
   static constexpr uint32_t MIN_FREE_BYTES      = 50 * 1024;
   static constexpr unsigned long DISCOVERY_DWELL_MS = 500;   // ms per channel during discovery scan
   static constexpr unsigned long ATTACK_DWELL_MS    = 4000;  // ms to stay on channel after deauth
@@ -119,7 +122,7 @@ private:
 
   static const char* SAVE_DIR;
 
-  int           _channel       = 1;
+  int           _channel       = 0;
   bool          _needRefresh   = false;
   bool          _storageOk     = false;
   unsigned long _lastFreeCheck = 0;
