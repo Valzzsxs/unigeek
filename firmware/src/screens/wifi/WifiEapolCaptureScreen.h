@@ -43,10 +43,18 @@ public:
   struct EapolEntry {
     std::string ssid;
     uint16_t    count         = 0;
-    bool        hasM1         = false;  // got ANonce from AP (no MIC)
-    bool        hasM2         = false;  // got SNonce + MIC from STA
     bool        beaconWritten = false;
-    std::string filepath;           // empty until PCAP file created
+    bool        validated     = false;  // confirmed valid handshake (beacon + paired M1+M2)
+    std::string filepath;
+
+    // In-memory handshake pairing (same logic as brute force parser)
+    uint8_t anonce[32]   = {};
+    uint8_t staMacM1[6]  = {};
+    bool    hasAnonce    = false;   // M1/M3 seen and written to PCAP
+
+    uint8_t m2Snonce[32] = {};
+    uint8_t staMacM2[6]  = {};
+    bool    hasM2Data    = false;   // M2 (non-zero nonce) seen and written to PCAP
   };
 
   // Ring buffer for ISR → main loop communication (lock-free SPSC)
@@ -74,6 +82,11 @@ public:
     std::vector<std::vector<uint8_t>>,
     MacHash, MacEqual> _pending;
 
+  // First beacon frame stored per AP (for PCAP writing)
+  static std::unordered_map<MacAddr,
+    std::vector<uint8_t>,
+    MacHash, MacEqual> _beaconStore;
+
   // Known APs for deauth injection — fixed array, no heap
   struct ApTarget {
     uint8_t bssid[6];
@@ -91,7 +104,7 @@ private:
   static constexpr int      MAX_DEAUTH_ATTEMPTS = 20;     // deauth bursts per AP before giving up and rescanning
   static constexpr uint32_t MIN_FREE_BYTES      = 50 * 1024;
   static constexpr unsigned long DISCOVERY_DWELL_MS = 500;   // ms per channel during discovery scan
-  static constexpr unsigned long ATTACK_DWELL_MS    = 4000;  // ms to stay on channel after deauth
+  static constexpr unsigned long ATTACK_DWELL_MS    = 6000;  // ms to stay on channel after deauth
 
   // ── Scan phase ────────────────────────────────────────────────────────────
   enum Phase { PHASE_DISCOVERY, PHASE_ATTACK };
@@ -138,6 +151,7 @@ private:
   void _appendPcapFrame(const std::string& path, const uint8_t* data, uint16_t len);
   void _registerApTarget(const MacAddr& bssid, uint8_t ch);
   void _sendDeauth(int ch);
+  int  _updateValidation(EapolEntry& entry, const uint8_t* data, uint16_t len);
   std::string _makePath(const MacAddr& bssid, const std::string& ssid);
   std::string _sanitize(const std::string& s);
 };

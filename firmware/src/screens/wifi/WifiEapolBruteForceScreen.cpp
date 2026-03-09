@@ -272,10 +272,14 @@ static const uint8_t* _parseEapolKey(const uint8_t* frm, uint16_t flen,
   int snap = findSnap(frm, flen);
   if (snap < 0 || (uint16_t)(snap + 9) >= flen) return nullptr;
   const uint8_t* eapol = frm + snap + 8;
-  if (eapol[1] != 0x03) return nullptr;
+  if (eapol[1] != 0x03) return nullptr;           // not EAPOL-Key
   uint16_t eap_len = ((uint16_t)eapol[2] << 8) | eapol[3];
   uint16_t total   = 4 + eap_len;
-  if ((uint16_t)(snap + 8) + total > flen || total < 100) return nullptr;
+  // Need at least 97 bytes from EAPOL start to cover MIC (offset 81..96)
+  uint16_t avail = flen - (uint16_t)(snap + 8);
+  if (total < 97 || avail < 97) return nullptr;
+  // Cap total to available bytes (frame may be truncated in PCAP)
+  if (total > avail) total = avail;
   *eapolOut = eapol;
   *totalOut = total;
   return eapol + 4;  // key descriptor
@@ -315,10 +319,22 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
     const uint8_t* frm  = rec + _off; \
     uint16_t       flen = (uint16_t)(_incl - _off);
 
-  // ── Pass 1: collect SSID from beacon; collect best ANonce from M1 or M3 ──
-  // M3's Nonce field == M1's ANonce (AP reuses same ANonce throughout exchange).
-  // Always overwrite with the latest M1/M3 so we end up with the most recent pair.
+  // ── Single pass: pair M1/M3 with M2 in either order ─────────────────────
+  // Handles both M1→M2 (normal) and M2→M3 (M1 missed) orderings.
   bool gotAnonce = false;
+  bool gotM2     = false;
+  uint8_t lastAnonce[32] = {};
+  uint8_t lastAp[6]  = {};
+  uint8_t lastSta[6] = {};
+
+  // Buffer for unpaired M2 (when M2 arrives before M1/M3)
+  bool    pendM2 = false;
+  uint8_t pendM2Sta[6]  = {};    // addr2 of M2 frame (STA = transmitter)
+  uint8_t pendM2Ap[6]   = {};    // addr1 of M2 frame (AP  = receiver)
+  uint8_t pendM2Snonce[32] = {};
+  uint8_t pendM2Mic[16] = {};
+  uint8_t pendM2Eapol[400] = {};
+  uint16_t pendM2EapolLen = 0;
 
   while (f.available() > 16) {
     READ_FRAME(frm, flen)
@@ -344,7 +360,7 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
       continue;
     }
 
-    // EAPOL — look for M1 (ack, !mic) or M3 (ack, mic, inst) as ANonce source
+    // EAPOL frame
     const uint8_t* eapol; uint16_t total;
     const uint8_t* key = _parseEapolKey(frm, flen, &eapol, &total);
     if (!key) continue;
@@ -353,51 +369,67 @@ bool WifiEapolBruteForceScreen::_parsePcap(const char* path) {
     bool     mic  = ki & kKiMic;
     bool     inst = ki & kKiInstall;
 
-    if (ack && (!mic || inst)) {  // M1 (!mic) or M3 (inst)
-      memcpy(hs.ap,     frm + 10, 6);   // addr2 = AP (transmitter)
-      memcpy(hs.sta,    frm + 4,  6);   // addr1 = STA (receiver)
-      memcpy(hs.anonce, key + 13, 32);
+    if (ack && (!mic || inst)) {
+      // ── M1 or M3 ──────────────────────────────────────────────────────
+      memcpy(lastAp,     frm + 10, 6);   // addr2 = AP
+      memcpy(lastSta,    frm + 4,  6);   // addr1 = STA
+      memcpy(lastAnonce, key + 13, 32);
       gotAnonce = true;
-      // Don't break — keep scanning so the LAST M1/M3 wins
-    }
-  }
 
-  if (!gotAnonce) { f.close(); return false; }
-
-  // ── Pass 2: find M2 whose MACs match the AP/STA recorded in pass 1 ───────
-  // Works regardless of whether M2 appears before or after M3 in the file.
-  f.seek(24);
-  bool gotM2 = false;
-
-  while (f.available() > 16) {
-    READ_FRAME(frm2, flen2)
-
-    const uint8_t* eapol; uint16_t total;
-    const uint8_t* key = _parseEapolKey(frm2, flen2, &eapol, &total);
-    if (!key) continue;
-    uint16_t ki   = ((uint16_t)key[1] << 8) | key[2];
-    bool     ack  = ki & kKiAck;
-    bool     mic  = ki & kKiMic;
-    bool     inst = ki & kKiInstall;
-
-    if (!ack && mic && !inst) {
-      // Reject M4: SNonce is all-zeros in M4
+      // Check if a buffered M2 from this same AP/STA pair can be paired now
+      if (pendM2 &&
+          memcmp(pendM2Sta, lastSta, 6) == 0 &&
+          memcmp(pendM2Ap,  lastAp,  6) == 0) {
+        memcpy(hs.ap,     lastAp,  6);
+        memcpy(hs.sta,    lastSta, 6);
+        memcpy(hs.anonce, lastAnonce, 32);
+        memcpy(hs.snonce, pendM2Snonce, 32);
+        memcpy(hs.mic,    pendM2Mic, 16);
+        if (pendM2EapolLen <= sizeof(hs.eapol)) {
+          memcpy(hs.eapol, pendM2Eapol, pendM2EapolLen);
+          memset(hs.eapol + 81, 0, 16);
+          hs.eapol_len = pendM2EapolLen;
+        }
+        gotM2 = true;
+      }
+    } else if (!ack && mic && !inst) {
+      // ── M2 candidate ───────────────────────────────────────────────────
       bool nonceZero = true;
       for (int z = 0; z < 32 && nonceZero; z++) nonceZero = (key[13 + z] == 0);
       if (nonceZero) continue;
-      // Must be from the STA → AP direction matching our pass-1 pair
-      if (memcmp(frm2 + 10, hs.sta, 6) != 0) continue;  // addr2=STA source
-      if (memcmp(frm2 + 4,  hs.ap,  6) != 0) continue;  // addr1=AP dest
 
-      memcpy(hs.snonce, key + 13, 32);
-      memcpy(hs.mic,    eapol + 81, 16);
-      if (total <= sizeof(hs.eapol)) {
-        memcpy(hs.eapol, eapol, total);
-        memset(hs.eapol + 81, 0, 16);
-        hs.eapol_len = total;
+      if (gotAnonce) {
+        // Forward pairing: M1/M3 already seen → pair with it
+        // M2 direction: addr1=AP(BSSID), addr2=STA
+        bool staMatch = memcmp(frm + 10, lastSta, 6) == 0;
+        bool apMatch  = memcmp(frm + 4,  lastAp,  6) == 0;
+        if (staMatch && apMatch) {
+          memcpy(hs.ap,     lastAp,  6);
+          memcpy(hs.sta,    lastSta, 6);
+          memcpy(hs.anonce, lastAnonce, 32);
+          memcpy(hs.snonce, key + 13, 32);
+          memcpy(hs.mic,    eapol + 81, 16);
+          if (total <= sizeof(hs.eapol)) {
+            memcpy(hs.eapol, eapol, total);
+            memset(hs.eapol + 81, 0, 16);
+            hs.eapol_len = total;
+          }
+          gotM2 = true;
+          continue;
+        }
       }
-      gotM2 = true;
-      break;
+
+      // No M1/M3 yet (or MACs didn't match) — buffer this M2 for reverse pairing
+      pendM2 = true;
+      memcpy(pendM2Sta, frm + 10, 6);   // addr2 = STA (transmitter in M2)
+      memcpy(pendM2Ap,  frm + 4,  6);   // addr1 = AP  (receiver in M2)
+      memcpy(pendM2Snonce, key + 13, 32);
+      memcpy(pendM2Mic,    eapol + 81, 16);
+      if (total <= sizeof(pendM2Eapol)) {
+        memcpy(pendM2Eapol, eapol, total);
+        memset(pendM2Eapol + 81, 0, 16);  // zero MIC in copy for verification later
+        pendM2EapolLen = total;
+      }
     }
   }
 
