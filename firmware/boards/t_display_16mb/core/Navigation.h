@@ -9,11 +9,15 @@ class NavigationImpl : public INavigation
 private:
   uint32_t _lastDownPressTime = 0;
   bool _downBtnWasPressed = false;
-  bool _waitingForDoubleClick = false;
-
-  // Used to trigger a synthetic click when timeout expires
+  bool _waitingForDownDoubleClick = false;
   bool _syntheticDownTriggered = false;
-  Direction _heldDirection = DIR_NONE;
+  Direction _heldDownDirection = DIR_NONE;
+
+  uint32_t _lastUpPressTime = 0;
+  bool _upBtnWasPressed = false;
+  bool _waitingForUpDoubleClick = false;
+  bool _syntheticUpTriggered = false;
+  Direction _heldUpDirection = DIR_NONE;
 
   // Timeout for double click in ms
   const uint32_t DOUBLE_CLICK_TIMEOUT = 250;
@@ -30,52 +34,91 @@ public:
     bool btnDown = (digitalRead(DW_BTN) == BTN_ACT);
     uint32_t now = millis();
 
-    if (btnUp) {
-      _waitingForDoubleClick = false;
-      updateState(DIR_UP);
+    // 1. Synthetic Up Trigger Release
+    if (_syntheticUpTriggered) {
+      _syntheticUpTriggered = false;
+      updateState(DIR_NONE);
       return;
     }
 
-    // Handle synthetic click generation when button is already released
-    // We send DIR_DOWN for one cycle, and then on the next cycle we send DIR_NONE to finish the click.
+    // 2. Synthetic Down Trigger Release
     if (_syntheticDownTriggered) {
       _syntheticDownTriggered = false;
       updateState(DIR_NONE);
       return;
     }
 
+    // 3. Process UP button
+    if (btnUp && !_upBtnWasPressed) {
+      _upBtnWasPressed = true;
+      if (_waitingForUpDoubleClick && (now - _lastUpPressTime) <= DOUBLE_CLICK_TIMEOUT) {
+        _waitingForUpDoubleClick = false;
+        _heldUpDirection = DIR_BACK;
+        updateState(DIR_BACK);
+      } else {
+        _waitingForUpDoubleClick = true;
+        _lastUpPressTime = now;
+        _heldUpDirection = DIR_NONE;
+        updateState(DIR_NONE);
+      }
+      return;
+    } else if (btnUp) {
+      if (_waitingForUpDoubleClick) {
+          if ((now - _lastUpPressTime) > DOUBLE_CLICK_TIMEOUT) {
+              _waitingForUpDoubleClick = false;
+              _heldUpDirection = DIR_UP;
+              updateState(DIR_UP);
+          } else {
+              updateState(DIR_NONE);
+          }
+      } else {
+          updateState(_heldUpDirection);
+      }
+      return;
+    } else {
+      _upBtnWasPressed = false;
+      _heldUpDirection = DIR_NONE;
+      if (_waitingForUpDoubleClick) {
+        if ((now - _lastUpPressTime) > DOUBLE_CLICK_TIMEOUT) {
+          _waitingForUpDoubleClick = false;
+          _syntheticUpTriggered = true;
+          updateState(DIR_UP);
+          return;
+        }
+      }
+    }
+
+    // 4. Process DOWN button
     if (btnDown && !_downBtnWasPressed) {
       _downBtnWasPressed = true;
-
-      if (_waitingForDoubleClick && (now - _lastDownPressTime) <= DOUBLE_CLICK_TIMEOUT) {
-        _waitingForDoubleClick = false;
-        _heldDirection = DIR_PRESS;
+      if (_waitingForDownDoubleClick && (now - _lastDownPressTime) <= DOUBLE_CLICK_TIMEOUT) {
+        _waitingForDownDoubleClick = false;
+        _heldDownDirection = DIR_PRESS;
         updateState(DIR_PRESS);
       } else {
-        _waitingForDoubleClick = true;
+        _waitingForDownDoubleClick = true;
         _lastDownPressTime = now;
-        _heldDirection = DIR_NONE;
+        _heldDownDirection = DIR_NONE;
         updateState(DIR_NONE);
       }
     } else if (btnDown) {
-      if (_waitingForDoubleClick) {
+      if (_waitingForDownDoubleClick) {
           if ((now - _lastDownPressTime) > DOUBLE_CLICK_TIMEOUT) {
-              _waitingForDoubleClick = false;
-              _heldDirection = DIR_DOWN;
+              _waitingForDownDoubleClick = false;
+              _heldDownDirection = DIR_DOWN;
               updateState(DIR_DOWN);
           } else {
               updateState(DIR_NONE);
           }
       } else {
-          updateState(_heldDirection);
+          updateState(_heldDownDirection);
       }
     } else {
       _downBtnWasPressed = false;
-      _heldDirection = DIR_NONE;
-
-      if (_waitingForDoubleClick) {
+      _heldDownDirection = DIR_NONE;
+      if (_waitingForDownDoubleClick) {
         if ((now - _lastDownPressTime) > DOUBLE_CLICK_TIMEOUT) {
-          _waitingForDoubleClick = false;
+          _waitingForDownDoubleClick = false;
           _syntheticDownTriggered = true;
           updateState(DIR_DOWN);
           return;
