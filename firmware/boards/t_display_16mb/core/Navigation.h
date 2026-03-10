@@ -6,6 +6,9 @@
 
 class NavigationImpl : public INavigation
 {
+private:
+  bool _dualPressed = false;
+
 public:
   void begin() override {
     pinMode(UP_BTN, INPUT_PULLUP);
@@ -17,9 +20,18 @@ public:
     bool btnUp = (digitalRead(UP_BTN) == BTN_ACT);
     bool btnDown = (digitalRead(DW_BTN) == BTN_ACT);
 
-    if (btnUp && btnDown) updateState(DIR_PRESS);
-    else if (btnUp) updateState(DIR_UP);
-    else if (btnDown) updateState(DIR_DOWN);
-    else updateState(DIR_NONE);
+    if (btnUp && btnDown) {
+      _dualPressed = true;
+      updateState(DIR_PRESS);
+    } else if (btnUp || btnDown) {
+      if (_dualPressed) {
+        updateState(DIR_PRESS);
+      } else {
+        updateState(btnUp ? DIR_UP : DIR_DOWN);
+      }
+    } else {
+      _dualPressed = false;
+      updateState(DIR_NONE);
+    }
   }
 };
