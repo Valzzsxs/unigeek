@@ -10,7 +10,7 @@ PROJECT_DIR = env.get("PROJECT_DIR")
 OUTPUT_PATH = os.path.join(PROJECT_DIR, "unigeek-latest.bin")
 
 DEFAULT_OFFSETS = {
-    "boot": 0,
+    "boot": 0x1000,
     "part": 0x8000,
     "app": 0x10000,
 }
