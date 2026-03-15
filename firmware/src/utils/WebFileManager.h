@@ -14,7 +14,7 @@ public:
 private:
   AsyncWebServer _server{80};
   fs::FS*        _fs             = nullptr;
-  File           _fsUpload;
+  fs::File       _fsUpload;
   int            _sessionCounter = 0;
   bool           _started        = false;
 

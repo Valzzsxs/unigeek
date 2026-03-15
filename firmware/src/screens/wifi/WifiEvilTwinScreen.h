@@ -5,6 +5,7 @@
 
 class DNSServer;
 class AsyncWebServer;
+class AsyncWebServerRequest;
 
 class WifiEvilTwinScreen : public ListScreen
 {
@@ -37,7 +38,8 @@ private:
 
   State  _state   = STATE_MENU;
   Target _target;
-  bool   _deauth  = false;
+  bool   _deauth       = false;
+  bool   _checkPwd     = false;
   String _portalFolder;  // empty = default
 
   class WifiAttackUtil* _attacker = nullptr;
@@ -48,6 +50,7 @@ private:
   ListItem _menuItems[5];
   String   _networkSub;
   String   _deauthSub;
+  String   _checkPwdSub;
   String   _portalSub;
 
   // Scan items
@@ -70,6 +73,8 @@ private:
   int      _pwdCount    = 0;
   unsigned long _lastDeauth = 0;
   unsigned long _lastDraw   = 0;
+  String   _pendingPwd;    // queued password to check in onUpdate()
+  int8_t   _pwdResult = 0; // 0=pending, 1=correct, -1=wrong
 
   // Portal HTML
   String _portalHtml;
@@ -79,16 +84,12 @@ private:
   void _showMenu();
   void _selectWifi();
   void _selectPortal();
-  void _checkPassword();
   void _startAttack();
   void _stopAttack();
   void _addLog(const char* msg);
   void _drawLog();
   void _loadPortalHtml();
-  void _saveCaptured(const String& email, const String& password);
-  void _serveStaticFile(AsyncWebServerRequest* req, const String& path);
-  String _getMimeType(const String& path);
+  void _saveCaptured(const String& data);
+  bool _tryPassword(const String& password);
 
-  static const char* _defaultPortalHtml();
-  static const char* _defaultSuccessHtml();
 };
