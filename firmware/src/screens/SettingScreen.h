@@ -35,6 +35,7 @@ private:
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
     SETT_NAV_MODE,
 #endif
+    SETT_WEB_PASSWORD,
     SETT_ABOUT,
     SETT_COUNT
   };
@@ -55,6 +56,7 @@ private:
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
   String _navModeSub;
 #endif
+  String _webPwdSub;
 
   ListItem _items[SETT_COUNT] = {
     {"Name",             ""},
@@ -73,6 +75,7 @@ private:
 #ifdef DEVICE_HAS_NAV_MODE_SWITCH
     {"Navigation Mode",  ""},
 #endif
+    {"Web Password",     ""},
     {"About"},
   };
 };
