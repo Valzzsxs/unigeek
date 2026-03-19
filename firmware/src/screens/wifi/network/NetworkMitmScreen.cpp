@@ -136,7 +136,7 @@ void NetworkMitmScreen::onUpdate()
   }
 
   // Redraw
-  if (millis() - _lastDraw > 300) {
+  if (millis() - _lastDraw > 800) {
     // Update starvation progress in status bar
     _drawLog();
     _lastDraw = millis();
