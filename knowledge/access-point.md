@@ -1,24 +1,33 @@
-# Access Point
+# Access Point — How It Works
 
-Broadcast a custom WiFi access point with optional rogue DNS, captive portal, and file manager.
+Creates a custom WiFi access point from the ESP32, turning the device into a standalone hotspot. Optionally adds DNS spoofing, a captive portal, and a web file manager — useful for phishing simulations, rogue AP testing, or simply sharing files over WiFi.
 
-## Menu Options
+## Setup
 
-- **SSID** — Set the AP name (max 32 chars)
-- **Password** — Set password (min 8 chars, or empty for open network)
-- **Hidden** — Toggle hidden SSID
-- **Rogue DNS** — Redirect configured domains to custom pages served from device storage; requires `dns_config` file
-- **Captive Portal** — Select a portal template shown on WiFi connectivity checks (the "Sign in to network" popup); choose from folders in `/unigeek/wifi/portals/`
-- **File Manager** — Enable web file manager accessible at `unigeek.local`; requires web files installed
-- **Start** — Launch the AP and show real-time log
+1. Go to **WiFi > Access Point**
+2. **SSID** — Set the network name (max 32 chars, saved in config)
+3. **Password** — Set a password (min 8 chars for WPA2, or leave empty for an open network; saved in config)
+4. **Hidden** — Toggle hidden SSID (network won't appear in scan lists but can still be joined manually)
+5. **DNS Spoof** — Redirect configured domains to custom phishing pages; requires a `dns_config` file on storage
+6. **Captive Portal** — Select a portal template that triggers on WiFi connectivity checks (the "Sign in to network" popup); choose from folders in `/unigeek/wifi/portals/`
+7. **File Manager** — Enable a web file manager accessible at `unigeek.local` (port 8080); requires web files installed
+8. **Start** — Launch the AP and enter the log view
 
-## Rogue DNS
+## During Attack
 
-When enabled, the device runs its own DHCP and DNS servers. All DNS queries resolve to the ESP32's IP. The web server routes requests based on the `Host` header:
+- The AP runs on IP `10.0.0.1` with subnet `255.255.255.0`
+- A real-time log shows client connections, DNS visits, and POST captures
+- Status bar shows DNS record count (if spoofing) and the AP IP address
+- Press **BACK** or **Press** to stop the AP
+- Press **DOWN** 3 times within 2 seconds to show a WiFi QR code — others can scan it to connect to the AP; press any button to dismiss and return to the log
+
+## DNS Spoofing
+
+When enabled, the device runs its own DNS server. All DNS queries from connected clients resolve to the ESP32's IP. The web server routes requests based on the `Host` header:
 
 - **Configured domains** (from `dns_config`) — Served from the path specified in the config
-- **Unconfigured domains** — Served from `/unigeek/wifi/portals/default/`
-- **Connectivity check domains** (captive.apple.com, etc.) — If Captive Portal is enabled, serves the selected portal template; otherwise returns HTTP 204
+- **Unconfigured domains** — Served from `/unigeek/wifi/portals/default/` (if it exists)
+- **Connectivity check domains** (captive.apple.com, connectivitycheck.gstatic.com, etc.) — If Captive Portal is enabled, serves the selected portal template; otherwise returns HTTP 204
 
 ### dns_config File
 
@@ -30,12 +39,39 @@ google.com:/unigeek/wifi/portals/google
 facebook.com:/unigeek/wifi/portals/facebook
 ```
 
+Each line maps a domain to a folder on storage containing HTML/CSS/JS files. The web server serves `index.htm` from the mapped folder when a client visits that domain.
+
 ## Captive Portal
 
-The captive portal only triggers on WiFi connectivity check URLs (used by iOS, Android, Windows, etc. to detect login pages). It does NOT affect regular browsing.
+The captive portal intercepts WiFi connectivity check URLs used by iOS, Android, Windows, Chrome, and Firefox to detect login-required networks. When a device connects to the AP, it automatically opens the portal page as a "Sign in to network" popup.
 
-POST form submissions are saved to `/unigeek/wifi/captives/{domain}.txt`.
+Captive detection endpoints handled:
+- Apple: `captive.apple.com`, `/hotspot-detect.html`
+- Google/Android: `connectivitycheck.gstatic.com`, `/generate_204`
+- Windows: `/connecttest.txt`, `/fwlink`, `/ncsi.txt`
+- Firefox: `/success.txt`
 
-## File Manager in AP Mode
+POST form submissions from the portal are saved to `/unigeek/wifi/captives/{domain}.txt`.
 
-When File Manager is enabled, visiting `unigeek.local` redirects to the file manager on port 8080. This only works when the toggle is on.
+## Web File Manager
+
+When enabled, visiting `unigeek.local` (or the AP IP on port 8080) opens a browser-based file manager for the device's storage. Useful for retrieving captured credentials, uploading portal templates, or managing files without USB.
+
+Requires web files to be installed on storage first — download them via **WiFi > Network > Download > Firmware Sample Files**.
+
+## Files
+
+| Path | Description |
+|------|-------------|
+| `/unigeek/wifi/portals/dns_config` | Domain-to-path mappings for DNS spoofing |
+| `/unigeek/wifi/portals/<name>/` | Portal template folders (HTML/CSS/JS) |
+| `/unigeek/wifi/captives/` | Captured POST data from portal forms |
+| `/unigeek/web/file_manager/` | Web file manager HTML files |
+
+## Notes
+
+- DNS Spoof and Captive Portal can be used independently or together
+- The captive portal only triggers on connectivity check URLs — it does not affect regular browsing of spoofed domains
+- SSID and password are persisted in the device config, so they survive reboots
+- The AP uses channel 1 by default
+- Maximum SSID length is 32 characters (WiFi standard limit)

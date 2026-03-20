@@ -19,20 +19,29 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 ## Features
 
 ### WiFi
-- **Network** — Connect to a WiFi network, sync time via NTP, world clock display
-- **Access Point** — Broadcast a custom AP with optional rogue DNS, captive portal, and web file manager ([details](knowledge/access-point.md))
+- **Network** — Connect to a WiFi network and access network tools
+  - **Information** — View connection details (IP, gateway, DNS, MAC, signal strength)
+  - **WiFi QRCode** — Generate a QR code for the connected network to share credentials
+  - **World Clock** — Display current time synced via NTP across multiple time zones
+  - **IP Scanner** — Scan the local network for active devices (ARP scan)
+  - **Port Scanner** — Scan open ports on a target IP address
+  - **Web File Manager** — Manage device files from a browser over WiFi ([details](knowledge/web-file-manager.md))
+  - **Download** — Download files from GitHub directly to device storage
+    - **Web File Manager** — HTML/CSS/JS interface for browser-based file management (auto-checks for updates)
+    - **Firmware Sample Files** — Portal templates (Google, Facebook, WiFi login), DuckyScript payloads (hello world, reverse shell, WiFi password grab, rickroll, disable defender), QR code samples, DNS spoofing config, and rockyou_mini password wordlist
+  - **MITM Attack** — Man-in-the-middle with DHCP starvation, rogue DHCP, DNS spoofing, and web file manager ([details](knowledge/network-mitm.md))
+- **Access Point** — Create a custom WiFi hotspot with optional DNS spoofing, captive portal, web file manager, and WiFi QR code for easy sharing ([details](knowledge/access-point.md))
+- **Evil Twin** — Clone a target AP's SSID with a captive portal; optional deauth and real-time password verification ([details](knowledge/evil-twin.md))
+- **Karma Attack** — Sniff probe requests to discover saved networks, then deploy fake APs with captive portals to capture credentials ([details](knowledge/karma-attack.md))
 - **WiFi Analyzer** — Scan and display nearby networks with signal strength and channel info
 - **Packet Monitor** — Visualize raw 802.11 traffic by channel
-- **Evil Twin** — Clone a target AP's SSID with a captive portal to capture credentials; supports custom portal templates, optional deauthentication of the real AP, and real-time password verification against the target network ([details](knowledge/evil-twin.md))
-- **WiFi Deauther** — Send deauthentication frames to a target network
-- **Deauther Detector** — Monitor and list detected deauthentication attacks
-- **Beacon Spam** — Broadcast fake SSIDs repeatedly
-- **CIW Zeroclick** — Broadcast crafted SSIDs containing injection payloads (command injection, XSS, CRLF, JNDI, buffer overflow, format string, etc.) to test how nearby devices handle untrusted network names; tracks which devices connect and flags potential crashes
-- **ESPNOW Chat** — Peer-to-peer text chat over ESP-NOW (no router required)
-- **EAPOL Capture** — Passive WPA2 handshake capture; auto-discovers APs, deauths clients, waits for M1+M2 reconnect handshake, saves to PCAP on storage
-- **EAPOL Brute Force** — Offline WPA2 password cracking from a captured PCAP; select wordlist from storage or use a built-in test list; runs PBKDF2-HMAC-SHA1 + PTK/MIC verification on-device
-- **Download** — Download web file manager HTML and firmware sample files (portal templates, DuckyScript payloads, QR codes, password wordlists) directly from GitHub to device storage
-- **Web File Manager** — Manage device files from a browser over WiFi ([details](knowledge/web-file-manager.md))
+- **WiFi Deauther** — Send deauthentication frames to disconnect clients from a target network
+- **Deauther Detector** — Monitor the air for deauthentication attacks and list offending BSSIDs
+- **Beacon Spam** — Flood the area with fake SSIDs
+- **CIW Zeroclick** — Broadcast SSIDs containing injection payloads (XSS, CRLF, JNDI, format string, etc.) to test how nearby devices handle untrusted network names
+- **ESPNOW Chat** — Peer-to-peer text chat over ESP-NOW (no router needed)
+- **EAPOL Capture** — Capture WPA2 4-way handshakes; auto-discovers APs, deauths clients, saves PCAP to storage
+- **EAPOL Brute Force** — Offline WPA2 password cracking from captured PCAP using on-device PBKDF2-HMAC-SHA1
 
 ### Bluetooth
 - **BLE Analyzer** — Scan nearby BLE devices, display RSSI, name, address, and advertisement data
@@ -126,8 +135,8 @@ Files are stored under `/unigeek/` on either SD card or LittleFS (fallback):
 /unigeek/config                    device configuration
 /unigeek/keyboard/duckyscript/     Ducky Script files (.ds)
 /unigeek/wifi/eapol/               WPA2 handshake captures (.pcap)
-/unigeek/wifi/portals/             Evil Twin portal templates (HTML/CSS/JS)
-/unigeek/wifi/captives/            Captured credentials from Evil Twin / Rogue DNS
+/unigeek/wifi/portals/             Portal templates for AP, Evil Twin, Karma (HTML/CSS/JS)
+/unigeek/wifi/captives/            Captured credentials from Evil Twin / Karma / Rogue DNS
 /unigeek/qrcode/                   QR code content files
 /unigeek/utility/passwords/        Password wordlists for EAPOL brute force
 /unigeek/web/file_manager/         Web file manager HTML files
@@ -165,7 +174,6 @@ firmware/
 
 ## TODO
 
-- Karma Attack
 - GPS Wardriving
 - NFC Hack
 - Lora
