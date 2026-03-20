@@ -36,7 +36,7 @@ void WifiPacketMonitorScreen::onUpdate()
 
   if (Uni.Nav->wasPressed()) {
     const auto dir = Uni.Nav->readDirection();
-    if (dir == INavigation::DIR_BACK) {
+    if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
       _quit();
       return;
     }
