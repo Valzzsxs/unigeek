@@ -4,7 +4,7 @@ A Man-in-the-Middle (MITM) attack intercepts traffic between devices on a networ
 
 ## How It Works
 
-The attack combines up to four components that work together:
+The attack combines up to five components that work together:
 
 ### 1. DHCP Starvation
 
@@ -16,9 +16,18 @@ Floods the network's legitimate DHCP server with fake lease requests using spoof
 - Stops automatically when the pool is exhausted (NAK threshold) or stuck (20 consecutive timeouts)
 - Status bar shows: ACK count, NAK count, timeout count, consecutive timeouts
 
-### 2. Rogue DHCP Server
+### 2. Deauth Burst
 
-After starvation empties the real DHCP pool (or immediately if starvation is off), a rogue DHCP server starts on the ESP32. New devices joining the network — or existing devices renewing their lease — receive IP assignments from the ESP32 instead of the real router.
+After DHCP starvation succeeds (pool exhausted), an optional 10-second deauthentication burst forces all connected clients off the network. This makes them reconnect — and since the real DHCP pool is now empty, they'll get their IP from the rogue DHCP server instead.
+
+- Only triggers after successful starvation (not on failure/stuck)
+- ESP32 disconnects from the network first, sends broadcast deauth frames for 10 seconds
+- After deauth completes, ESP32 reconnects with a static IP (preserving its original address)
+- Status bar shows countdown: `Deauth: Xs left`
+
+### 3. Rogue DHCP Server
+
+After starvation empties the real DHCP pool and deauth burst completes (or immediately if both are off), a rogue DHCP server starts on the ESP32. New devices joining the network — or existing devices renewing their lease — receive IP assignments from the ESP32 instead of the real router.
 
 The rogue server sets itself as:
 - **Gateway** — all traffic routes through the ESP32
@@ -27,7 +36,7 @@ The rogue server sets itself as:
 
 This is what makes it a true MITM — the attacker becomes the network's gateway and DNS resolver.
 
-### 3. DNS Spoofing
+### 4. DNS Spoofing
 
 Intercepts DNS queries from victims and returns fake responses, redirecting specific domains to attacker-controlled pages (phishing portals, credential capture forms, etc.).
 
@@ -39,7 +48,7 @@ Intercepts DNS queries from victims and returns fake responses, redirecting spec
 - Captures and logs form POST data from phishing pages
 - Credentials saved to `/unigeek/wifi/captives/`
 
-### 4. Web File Manager
+### 5. Web File Manager
 
 Optionally runs a file manager on port 8080, allowing the attacker to browse and manage device storage from a browser during the attack.
 
@@ -51,12 +60,17 @@ Optionally runs a file manager on port 8080, allowing the attacker to browse and
 3. Enable desired components
 4. Start
 
-If DHCP Starvation + Rogue DHCP are both enabled:
+Full attack chain (Starvation + Deauth + Rogue DHCP):
   Starvation runs first → exhausts real DHCP pool
-  → Rogue DHCP starts automatically after
-  → New/renewing clients get our gateway + DNS
+  → Deauth burst (10s) → forces all clients off
+  → ESP32 reconnects with static IP
+  → Rogue DHCP starts → reconnecting clients get our gateway + DNS
 
-If only Rogue DHCP (no starvation):
+Starvation + Rogue DHCP (no deauth):
+  Starvation runs → exhausts pool
+  → Rogue DHCP starts → waits for clients to renew naturally
+
+Only Rogue DHCP (no starvation):
   Starts immediately, races with real DHCP server
   (less reliable — real server may respond first)
 ```
@@ -69,7 +83,8 @@ If only Rogue DHCP (no starvation):
 4. **DNS Spoof** — Toggle on to redirect domains to phishing portals (requires `dns_config` file)
 5. **File Manager** — Toggle on for remote file access on port 8080
 6. **DHCP Starvation** — Toggle on to exhaust the real DHCP pool first (recommended with Rogue DHCP)
-7. **Start** — Launches the attack
+7. **Deauth Burst** — Toggle on to force clients to reconnect after starvation succeeds (only fires on successful starvation)
+8. **Start** — Launches the attack
 
 ## During Attack
 
@@ -88,5 +103,6 @@ If only Rogue DHCP (no starvation):
 
 - DHCP Starvation is most effective on networks with small IP pools (e.g., /24 = 254 addresses)
 - Enterprise networks with 802.1X, DHCP snooping, or dynamic ARP inspection will resist this attack
-- The rogue DHCP only catches devices that request a new lease — already-connected devices with valid leases are unaffected until renewal
+- The rogue DHCP only catches devices that request a new lease — already-connected devices with valid leases are unaffected until renewal (this is why Deauth Burst is useful)
+- Deauth Burst disconnects the ESP32 temporarily; it reconnects with a static IP after the burst
 - WPAD interception only works on devices/browsers that support proxy auto-discovery (mainly Windows, some Linux)

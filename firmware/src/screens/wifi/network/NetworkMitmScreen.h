@@ -5,6 +5,7 @@
 #include "utils/RogueDhcpServer.h"
 #include "utils/DnsSpoofServer.h"
 #include "utils/WebFileManager.h"
+#include "utils/WifiAttackUtil.h"
 
 class NetworkMitmScreen : public ListScreen {
 public:
@@ -26,14 +27,16 @@ private:
   bool _dnsEnabled     = false;
   bool _fmEnabled      = false;
   bool _starvEnabled   = false;
+  bool _deauthBurst    = false;
 
   // Sublabels
   String _rogueSub;
   String _dnsSub;
   String _fmSub;
   String _starvSub;
+  String _deauthSub;
 
-  ListItem _menuItems[5];
+  ListItem _menuItems[6];
 
   // Attack components
   DhcpStarvation  _starv;
@@ -41,7 +44,19 @@ private:
   DnsSpoofServer  _dnsSpoof;
   WebFileManager  _fileManager;
 
-  bool _starvRunning = false;
+  bool _starvRunning  = false;
+  bool _deauthRunning = false;
+  unsigned long _deauthStart = 0;
+  WifiAttackUtil* _attacker = nullptr;
+
+  // Saved network info for reconnect
+  String   _savedSSID;
+  String   _savedPassword;
+  uint8_t  _savedBSSID[6] = {};
+  uint8_t  _savedChannel  = 0;
+  IPAddress _savedIP;
+  IPAddress _savedGateway;
+  IPAddress _savedSubnet;
 
   // Log
   static constexpr int MAX_LOG = 30;
@@ -53,6 +68,9 @@ private:
   void _start();
   void _stop();
   void _startRogueDhcp();
+  void _startDeauthBurst();
+  void _stopDeauthBurst();
+  void _reconnectStaticIP();
   void _addLog(const char* msg);
   void _drawLog();
 
