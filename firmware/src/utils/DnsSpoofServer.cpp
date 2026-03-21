@@ -294,8 +294,10 @@ void DnsSpoofServer::_startWeb()
     const char* p = _findPath(host.c_str());
     if (p) {
       _serveFromPath(p, req);
+    } else if (_captiveIntercept) {
+      _serveFromPath(_captivePath[0] != '\0' ? _captivePath : "/unigeek/wifi/portals/default", req);
     } else {
-      _serveFromPath("/unigeek/wifi/portals/default", req);
+      req->send(204); // pass connectivity check for unconfigured domains
     }
   });
 

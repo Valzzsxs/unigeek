@@ -20,7 +20,7 @@ private:
   enum State { STATE_MENU, STATE_LOG, STATE_QR };
   State _state  = STATE_MENU;
   bool  _hidden = false;
-  bool  _rogueEnabled = false;
+  bool  _dnsSpoofEnabled = false;
   bool  _captiveEnabled = false;
   bool  _fileManagerEnabled = false;
 
@@ -33,7 +33,7 @@ private:
 
   ListItem _menuItems[7];
 
-  DnsSpoofServer _rogueServer;
+  DnsSpoofServer _dnsSpoofServer;
   WebFileManager _fileManager;
 
   // Log view

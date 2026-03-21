@@ -43,7 +43,7 @@ void WifiAPScreen::onInit()
 
 void WifiAPScreen::onUpdate()
 {
-  _rogueServer.update();
+  _dnsSpoofServer.update();
 
   if (_state == STATE_LOG && millis() - _lastDraw > 500) {
     _drawLog();
@@ -146,15 +146,15 @@ void WifiAPScreen::onItemSelected(uint8_t index)
       break;
     }
     case 3: { // DNS Spoof toggle
-      if (!_rogueEnabled) {
+      if (!_dnsSpoofEnabled) {
         if (!Uni.Storage || !Uni.Storage->exists(DnsSpoofServer::CONFIG_PATH)) {
           ShowStatusAction::show("dns_config not found", 1500);
           render();
           break;
         }
       }
-      _rogueEnabled = !_rogueEnabled;
-      _menuItems[3].sublabel = _rogueEnabled ? "Yes" : "No";
+      _dnsSpoofEnabled = !_dnsSpoofEnabled;
+      _menuItems[3].sublabel = _dnsSpoofEnabled ? "Yes" : "No";
       render();
       break;
     }
@@ -240,7 +240,7 @@ void WifiAPScreen::_showMenu()
   _menuItems[0] = {"SSID",            _ssidSub.c_str()};
   _menuItems[1] = {"Password",        _passwordSub.c_str()};
   _menuItems[2] = {"Hidden",          _hidden ? "Yes" : "No"};
-  _menuItems[3] = {"DNS Spoof",       _rogueEnabled ? "Yes" : "No"};
+  _menuItems[3] = {"DNS Spoof",       _dnsSpoofEnabled ? "Yes" : "No"};
   _menuItems[4] = {"Captive Portal",  _captiveSub.c_str()};
   _menuItems[5] = {"File Manager",    _fileManagerEnabled ? "Yes" : "No"};
   _menuItems[6] = {"Start"};
@@ -261,15 +261,16 @@ void WifiAPScreen::_startAP()
   WiFi.softAP(ssid.c_str(), pwd.c_str(), 1, _hidden);
 
   // Start DNS Spoof if enabled (also needed for captive portal)
-  if (_rogueEnabled || _captiveEnabled) {
-    _rogueServer.setVisitCallback(_onVisit);
-    _rogueServer.setPostCallback(_onPost);
+  if (_dnsSpoofEnabled || _captiveEnabled) {
+    _dnsSpoofServer.setVisitCallback(_onVisit);
+    _dnsSpoofServer.setPostCallback(_onPost);
+    _dnsSpoofServer.setCaptiveIntercept(_captiveEnabled);
     if (_captiveEnabled) {
-      _rogueServer.setCaptivePortalPath(_captivePath.c_str());
+      _dnsSpoofServer.setCaptivePortalPath(_captivePath.c_str());
     }
-    _rogueServer.setFileManagerEnabled(_fileManagerEnabled);
-    if (!_rogueServer.begin(WiFi.softAPIP())) {
-      _rogueEnabled = false;
+    _dnsSpoofServer.setFileManagerEnabled(_fileManagerEnabled);
+    if (!_dnsSpoofServer.begin(WiFi.softAPIP())) {
+      _dnsSpoofEnabled = false;
       _captiveEnabled = false;
     }
   }
@@ -286,15 +287,15 @@ void WifiAPScreen::_startAP()
 
 void WifiAPScreen::_stopAP()
 {
-  if (_rogueEnabled || _captiveEnabled) {
-    _rogueServer.end();
+  if (_dnsSpoofEnabled || _captiveEnabled) {
+    _dnsSpoofServer.end();
   }
   if (_fileManagerEnabled) {
     _fileManager.end();
   }
   WiFi.softAPdisconnect(true);
   WiFi.mode(WIFI_MODE_STA);
-  _rogueEnabled = false;
+  _dnsSpoofEnabled = false;
   _captiveEnabled = false;
   _fileManagerEnabled = false;
   _logCount    = 0;
@@ -330,15 +331,15 @@ void WifiAPScreen::_showLog()
   snprintf(apLabel, sizeof(apLabel), "[*] AP: %s", ssid.c_str());
   _addLog(apLabel);
 
-  if (_rogueEnabled) {
+  if (_dnsSpoofEnabled) {
     _addLog("[*] DNS Spoof started");
-    for (int i = 0; i < _rogueServer.recordCount(); i++) {
+    for (int i = 0; i < _dnsSpoofServer.recordCount(); i++) {
       char buf[60];
-      const char* path = _rogueServer.records()[i].path;
+      const char* path = _dnsSpoofServer.records()[i].path;
       const char* lastSlash = strrchr(path, '/');
       const char* pathName = lastSlash ? lastSlash + 1 : path;
       snprintf(buf, sizeof(buf), "  %s > %s",
-               _rogueServer.records()[i].domain, pathName);
+               _dnsSpoofServer.records()[i].domain, pathName);
       _addLog(buf);
     }
   }
@@ -351,7 +352,13 @@ void WifiAPScreen::_showLog()
   }
 
   if (_fileManagerEnabled) {
-    _addLog("[*] File Manager: unigeek.local");
+    if (_dnsSpoofEnabled) {
+      _addLog("[*] File Manager: unigeek.local");
+    } else {
+      char fmBuf[60];
+      snprintf(fmBuf, sizeof(fmBuf), "[*] File Manager: %s", WiFi.softAPIP().toString().c_str());
+      _addLog(fmBuf);
+    }
   }
 
   _addLog("");
@@ -413,8 +420,8 @@ void WifiAPScreen::_drawLog()
   sp.setTextDatum(TL_DATUM);
 
   char label[30];
-  if (_rogueEnabled) {
-    snprintf(label, sizeof(label), "DNS: %d", _rogueServer.recordCount());
+  if (_dnsSpoofEnabled) {
+    snprintf(label, sizeof(label), "DNS: %d", _dnsSpoofServer.recordCount());
   } else {
     snprintf(label, sizeof(label), "AP");
   }

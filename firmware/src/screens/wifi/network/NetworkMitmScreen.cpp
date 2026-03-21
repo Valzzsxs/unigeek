@@ -213,7 +213,11 @@ void NetworkMitmScreen::_start()
   // 3. Start File Manager
   if (_fmEnabled) {
     if (_fileManager.begin()) {
-      _addLog("[+] File Manager on :8080");
+      if (_dnsEnabled) {
+        _addLog("[+] File Manager: unigeek.local");
+      } else {
+        _addLog("[+] File Manager on :8080");
+      }
     } else {
       _addLog("[!] File Manager failed");
       _fmEnabled = false;

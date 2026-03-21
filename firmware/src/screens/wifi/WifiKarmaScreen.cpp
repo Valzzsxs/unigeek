@@ -472,16 +472,15 @@ void WifiKarmaScreen::_saveSSIDToFile(const char* ssid)
   Uni.Storage->makeDir("/unigeek/wifi/captives");
   String path = "/unigeek/wifi/captives/karma_ssid.txt";
 
-  // Format: {epoch}:{ssid}
   char line[80];
-  unsigned long epoch = millis() / 1000;
   struct tm timeinfo;
   if (getLocalTime(&timeinfo, 0)) {
-    time_t now;
-    time(&now);
-    epoch = (unsigned long)now;
+    char ts[20];
+    strftime(ts, sizeof(ts), "%Y-%m-%d %H:%M:%S", &timeinfo);
+    snprintf(line, sizeof(line), "%s:%s", ts, ssid);
+  } else {
+    snprintf(line, sizeof(line), "%lu:%s", millis() / 1000, ssid);
   }
-  snprintf(line, sizeof(line), "%lu:%s", epoch, ssid);
 
   fs::File f = Uni.Storage->open(path.c_str(), FILE_APPEND);
   if (f) {
