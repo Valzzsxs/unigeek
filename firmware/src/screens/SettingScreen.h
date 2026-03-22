@@ -36,6 +36,7 @@ private:
     SETT_NAV_MODE,
 #endif
     SETT_WEB_PASSWORD,
+    SETT_DEVICE_STATUS,
     SETT_ABOUT,
     SETT_COUNT
   };
@@ -76,6 +77,7 @@ private:
     {"Navigation Mode",  ""},
 #endif
     {"Web Password",     ""},
+    {"Device Status"},
     {"About"},
   };
 };

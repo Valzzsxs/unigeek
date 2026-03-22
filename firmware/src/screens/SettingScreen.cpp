@@ -11,6 +11,7 @@
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputSelectOption.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "screens/DeviceStatusScreen.h"
 
 void SettingScreen::onInit() {
   setItems(_items);
@@ -177,6 +178,11 @@ void SettingScreen::onItemSelected(uint8_t index) {
         Config.save(Uni.Storage);
       }
       _refresh();
+      break;
+    }
+
+    case SETT_DEVICE_STATUS: {
+      Screen.setScreen(new DeviceStatusScreen());
       break;
     }
 
