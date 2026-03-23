@@ -24,6 +24,7 @@ jobs:
           - m5_cardputer
           - m5_cardputer_adv
           - t_display_16mb
+          # diy_smoochie excluded — not fully working
 
     steps:
       - name: Checkout
