@@ -28,8 +28,11 @@ Device* Device::createInstance() {
   Wire1.begin(INTERNAL_SDA, INTERNAL_SCL);  // Wire1: AXP192 + BM8563 share same internal I2C bus
   storageLFS.begin();
 
-  return new Device(display, power, &navigation, nullptr,
-                    nullptr, &storageLFS, nullptr, &speaker);
+  auto* dev = new Device(display, power, &navigation, nullptr,
+                         nullptr, &storageLFS, nullptr, &speaker);
+  dev->ExI2C = &Wire;   // free — Wire1 is used for AXP192+RTC
+  dev->InI2C = &Wire1;  // AXP192 + BM8563 RTC
+  return dev;
 }
 
 void Device::applyNavMode() {

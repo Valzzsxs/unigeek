@@ -11,6 +11,7 @@
 #include "ui/actions/InputNumberAction.h"
 #include "ui/actions/InputSelectOption.h"
 #include "ui/actions/ShowStatusAction.h"
+#include "screens/PinSettingScreen.h"
 #include "screens/DeviceStatusScreen.h"
 
 void SettingScreen::onInit() {
@@ -178,6 +179,11 @@ void SettingScreen::onItemSelected(uint8_t index) {
         Config.save(Uni.Storage);
       }
       _refresh();
+      break;
+    }
+
+    case SETT_PIN_SETTING: {
+      Screen.setScreen(new PinSettingScreen());
       break;
     }
 

@@ -38,6 +38,9 @@ Device* Device::createInstance() {
   storageLFS.begin();
   storageSD.begin(SD_CS, sharedSpi);
 
-  return new Device(display, power, &navigation, &keyboard,
-                    &storageSD, &storageLFS, &sharedSpi, &speaker);
+  auto* dev = new Device(display, power, &navigation, &keyboard,
+                         &storageSD, &storageLFS, &sharedSpi, &speaker);
+  dev->ExI2C = &Wire1;  // free — Wire is used for keyboard/RTC/audio
+  dev->InI2C = &Wire;   // TCA8418 + PCF85063A RTC + ES8311
+  return dev;
 }

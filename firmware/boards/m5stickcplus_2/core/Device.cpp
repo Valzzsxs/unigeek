@@ -37,8 +37,11 @@ Device* Device::createInstance() {
 
   storageLFS.begin();
 
-  return new Device(display, power, &navigation, nullptr,
-                    nullptr, &storageLFS, nullptr, &speaker);
+  auto* dev = new Device(display, power, &navigation, nullptr,
+                         nullptr, &storageLFS, nullptr, &speaker);
+  dev->ExI2C = &Wire;   // free — Wire1 is used for RTC
+  dev->InI2C = &Wire1;  // BM8563 RTC
+  return dev;
 }
 
 void Device::applyNavMode() {

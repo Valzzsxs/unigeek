@@ -27,10 +27,11 @@ Device* Device::createInstance() {
   digitalWrite(SD_CS, HIGH);
   sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
   storageLFS.begin();
-  bool sdOk = storageSD.begin(SD_CS, sdSpi);
-  Serial.printf("[DEV] SD init %s (CS=%d SCK=%d MOSI=%d MISO=%d)\n",
-    sdOk ? "OK" : "FAILED", SD_CS, SPI_SCK_PIN, SPI_MOSI_PIN, SPI_MISO_PIN);
+  storageSD.begin(SD_CS, sdSpi);
 
-  return new Device(display, power, &navigation, &keyboard,
-                    &storageSD, &storageLFS, nullptr, &speaker);
+  auto* dev = new Device(display, power, &navigation, &keyboard,
+                         &storageSD, &storageLFS, nullptr, &speaker);
+  dev->ExI2C = &Wire;   // free — Keyboard+ES8311 use Wire1
+  dev->InI2C = &Wire1;  // TCA8418 keyboard + ES8311 codec
+  return dev;
 }

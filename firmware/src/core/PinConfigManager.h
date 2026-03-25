@@ -8,10 +8,10 @@
 #include "IStorage.h"
 
 // ─── Pin config keys & defaults ──────────────────────────────────────────────
-#define PIN_CONFIG_NFC_SDA          "nfc_sda"
-#define PIN_CONFIG_NFC_SDA_DEFAULT  "2"
-#define PIN_CONFIG_NFC_SCL          "nfc_scl"
-#define PIN_CONFIG_NFC_SCL_DEFAULT  "1"
+#define PIN_CONFIG_EXT_SDA          "ext_sda"
+#define PIN_CONFIG_EXT_SDA_DEFAULT  "2"
+#define PIN_CONFIG_EXT_SCL          "ext_scl"
+#define PIN_CONFIG_EXT_SCL_DEFAULT  "1"
 
 class PinConfigManager
 {

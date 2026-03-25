@@ -21,6 +21,8 @@ Device* Device::createInstance() {
 
   storageLFS.begin();
 
-  return new Device(display, power, &navigation, nullptr,
-                    nullptr, &storageLFS, nullptr, nullptr);
+  auto* dev = new Device(display, power, &navigation, nullptr,
+                         nullptr, &storageLFS, nullptr, nullptr);
+  dev->ExI2C = &Wire;  // free — no internal I2C on this board
+  return dev;
 }

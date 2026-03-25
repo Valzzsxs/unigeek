@@ -20,6 +20,8 @@ void Device::boardHook() {}
 Device* Device::createInstance() {
   pinMode(LCD_BL, OUTPUT);
   digitalWrite(LCD_BL, HIGH);
-  return new Device(display, power, &navigation, nullptr,
-                    &storageSD, &storageLFS, &sdSpi, nullptr);
+  auto* dev = new Device(display, power, &navigation, nullptr,
+                         &storageSD, &storageLFS, &sdSpi, nullptr);
+  dev->ExI2C = &Wire;  // free — no internal I2C on this board
+  return dev;
 }

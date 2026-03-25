@@ -1,8 +1,8 @@
 #include "I2CDetectorScreen.h"
-#include <Wire.h>
 #include "core/Device.h"
 #include "core/INavigation.h"
 #include "core/ScreenManager.h"
+#include "core/PinConfigManager.h"
 #include "screens/utility/UtilityMenuScreen.h"
 
 void I2CDetectorScreen::onInit() {
@@ -11,11 +11,29 @@ void I2CDetectorScreen::onInit() {
 
 void I2CDetectorScreen::_scan() {
   memset(_found, 0, sizeof(_found));
-  TwoWire* bus = (_wireIndex == 0) ? &Wire : &Wire1;
-  for (uint8_t addr = 0x08; addr < 0x78; addr++) {
-    bus->beginTransmission(addr);
-    if (bus->endTransmission() == 0) {
-      _found[addr] = true;
+
+  if (_wireIndex == 0) {
+    // External I2C — user-configured pins, free state
+    if (!Uni.ExI2C) return;
+    int sda = PinConfig.getInt(PIN_CONFIG_EXT_SDA, PIN_CONFIG_EXT_SDA_DEFAULT);
+    int scl = PinConfig.getInt(PIN_CONFIG_EXT_SCL, PIN_CONFIG_EXT_SCL_DEFAULT);
+    Uni.ExI2C->begin(sda, scl);
+    Uni.ExI2C->setTimeOut(50);
+    for (uint8_t addr = 0x08; addr < 0x78; addr++) {
+      Uni.ExI2C->beginTransmission(addr);
+      if (Uni.ExI2C->endTransmission() == 0) {
+        _found[addr] = true;
+      }
+    }
+    Uni.ExI2C->end();
+  } else {
+    // Internal I2C — board-initialized
+    if (!Uni.InI2C) return;
+    for (uint8_t addr = 0x08; addr < 0x78; addr++) {
+      Uni.InI2C->beginTransmission(addr);
+      if (Uni.InI2C->endTransmission() == 0) {
+        _found[addr] = true;
+      }
     }
   }
 }
@@ -41,8 +59,15 @@ void I2CDetectorScreen::onRender() {
   spr.setTextColor(TFT_YELLOW, TFT_BLACK);
   spr.setTextSize(1);
   spr.setCursor(2, 2);
-  spr.print("Bus: ");
-  spr.print(_wireIndex == 0 ? "Wire" : "Wire1");
+  if (_wireIndex == 0) {
+    int sda = PinConfig.getInt(PIN_CONFIG_EXT_SDA, PIN_CONFIG_EXT_SDA_DEFAULT);
+    int scl = PinConfig.getInt(PIN_CONFIG_EXT_SCL, PIN_CONFIG_EXT_SCL_DEFAULT);
+    char label[32];
+    snprintf(label, sizeof(label), "External (SDA:%d SCL:%d)", sda, scl);
+    spr.print(label);
+  } else {
+    spr.print("Internal");
+  }
 
   const uint16_t labelH = 12;
   const uint16_t hintH  = 10;

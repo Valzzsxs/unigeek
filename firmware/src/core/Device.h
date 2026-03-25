@@ -11,6 +11,7 @@
 #include "IStorage.h"
 #include "ISpeaker.h"
 #include <SPI.h>
+#include <Wire.h>
 
 #ifndef TFT_DEFAULT_ORIENTATION
 #define TFT_DEFAULT_ORIENTATION 1
@@ -63,6 +64,8 @@ public:
   IKeyboard*  Keyboard   = nullptr;
   ISpeaker*   Speaker    = nullptr;
   SPIClass*   Spi        = nullptr;  // shared SPI bus (nullable, board-specific)
+  TwoWire*    ExI2C      = nullptr;  // external I2C — free state, caller must begin(sda,scl)/end()
+  TwoWire*    InI2C      = nullptr;  // internal I2C — board-initialized, do not end()
 
   // Prevent copying
   Device(const Device&)            = delete;
