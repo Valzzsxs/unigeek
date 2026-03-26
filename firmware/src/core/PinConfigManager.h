@@ -28,7 +28,11 @@
 #define PIN_CONFIG_GPS_TX           "gps_tx"
 #define PIN_CONFIG_GPS_RX           "gps_rx"
 #define PIN_CONFIG_GPS_BAUD         "gps_baud"
-#define PIN_CONFIG_GPS_BAUD_DEFAULT "9600"
+#ifdef GPS_BAUD
+  #define PIN_CONFIG_GPS_BAUD_DEFAULT String(GPS_BAUD)
+#else
+  #define PIN_CONFIG_GPS_BAUD_DEFAULT "9600"
+#endif
 
 class PinConfigManager
 {

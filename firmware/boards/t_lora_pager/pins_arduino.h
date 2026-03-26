@@ -60,9 +60,10 @@ static const uint8_t SCL = GROVE_SCL;
 #define LORA_BUSY  48
 
 // ─── GPS (MIA-M10Q) ───────────────────────────────────────
-#define GPS_TX   12
-#define GPS_RX    4
-#define GPS_PPS  13
+#define GPS_TX    12
+#define GPS_RX     4
+#define GPS_PPS   13
+#define GPS_BAUD  38400
 
 // ─── Audio Codec (ES8311) ─────────────────────────────────
 #define AUDIO_WS    18
@@ -79,8 +80,9 @@ static const uint8_t SCL = GROVE_SCL;
 #define SPK_I2S_PORT  I2S_NUM_0
 
 // ─── XL9555 I2C GPIO Expander ─────────────────────────────
-#define EXPANDS_AMP_EN   1  // port 0 bit 1 — NS4150B amp enable
-#define EXPANDS_GNSS_EN  4  // port 0 bit 4 — GNSS power supply enable
+#define EXPANDS_AMP_EN    1  // port 0 bit 1 — NS4150B amp enable
+#define EXPANDS_GNSS_EN   4  // port 0 bit 4 — GNSS power supply enable
+#define EXPANDS_GNSS_RST  7  // port 0 bit 7 — GNSS reset (LOW=reset, HIGH=normal)
 
 // ─── UART (external 12-pin socket) ────────────────────────
 #define UART1_TX  43
