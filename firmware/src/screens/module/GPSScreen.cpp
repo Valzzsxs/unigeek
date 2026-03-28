@@ -45,6 +45,14 @@ void GPSScreen::onUpdate() {
       _lastRender = millis();
       render();
     }
+    if (Uni.Nav->wasPressed()) {
+      auto dir = Uni.Nav->readDirection();
+      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        _gps.end();
+        _disableGnssPower();
+        Screen.setScreen(new ModuleMenuScreen());
+      }
+    }
     if (_gps.gps.location.isValid()) {
       // Sync device time from GPS (UTC)
       auto& d = _gps.gps.date;
@@ -73,14 +81,6 @@ void GPSScreen::onUpdate() {
       _disableGnssPower();
       Screen.setScreen(new ModuleMenuScreen());
       return;
-    }
-    if (Uni.Nav->wasPressed()) {
-      auto dir = Uni.Nav->readDirection();
-      if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
-        _gps.end();
-        _disableGnssPower();
-        Screen.setScreen(new ModuleMenuScreen());
-      }
     }
     return;
   }

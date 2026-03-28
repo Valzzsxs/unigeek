@@ -202,7 +202,6 @@ firmware/
 - LoRa
 - nr24lf
 - cc1101
-- add memory heap use percentage on status, it will be below battery. wifi or ble will be hidden unless it's active to make sure it's fit to small screen.
 - I need to quit on loading state gps
 - I can't quit from wardriving too
 - clean up leftover wardriving data when quit, it freeze my device after quit wardriving and open wardriving stat
