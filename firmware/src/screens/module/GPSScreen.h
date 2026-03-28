@@ -67,6 +67,7 @@ private:
   String _wigleTokenSub;
   String _internetSub;
   String _fileNames[MAX_FILES];
+  String _fileLabels[MAX_FILES];
   uint8_t _fileCount = 0;
 
   void _showMenu();

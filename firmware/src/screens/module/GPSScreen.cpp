@@ -41,13 +41,14 @@ void GPSScreen::onUpdate() {
 
   if (_state == STATE_LOADING) {
     // Re-render to animate spinner
-    if (millis() - _lastRender > 1000) {
+    if (millis() - _lastRender > 250) {
       _lastRender = millis();
       render();
     }
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        ShowStatusAction::show("Stopping GPS...", 0);
         _gps.end();
         _disableGnssPower();
         Screen.setScreen(new ModuleMenuScreen());
@@ -104,6 +105,7 @@ void GPSScreen::onUpdate() {
     if (Uni.Nav->wasPressed()) {
       auto dir = Uni.Nav->readDirection();
       if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
+        ShowStatusAction::show("Stopping wardrive...", 0);
         _gps.endWardrive();
         _showMenu();
       }
@@ -166,17 +168,15 @@ void GPSScreen::onRender() {
 }
 
 void GPSScreen::onBack() {
-  if (_state == STATE_MENU || _state == STATE_LOADING) {
-    ShowStatusAction::show("Stopping GPS...", 500);
+  if (_state == STATE_MENU) {
+    ShowStatusAction::show("Stopping GPS...", 0);
     WiFi.disconnect(true);
     WiFi.mode(WIFI_OFF);
     _gps.end();
     _disableGnssPower();
     Screen.setScreen(new ModuleMenuScreen());
-  } else if (_state == STATE_UPLOAD || _state == STATE_STATS) {
-    _showMenu();
   } else {
-    if (_state == STATE_WARDRIVING) _gps.endWardrive();
+    // STATE_UPLOAD or STATE_STATS only — all other states return early in onUpdate
     _showMenu();
   }
 }
@@ -195,6 +195,7 @@ void GPSScreen::onItemSelected(uint8_t index) {
           return;
         }
         _wardLog.clear();
+        _wardLog.addLine(("File: " + _gps.wardriveFilename()).c_str(), TFT_DARKGREY);
         _state = STATE_WARDRIVING;
         _renderWardriver();
         break;
@@ -208,13 +209,16 @@ void GPSScreen::onItemSelected(uint8_t index) {
         break;
       case 4:
         _showWigleStats();
+        render();
         break;
       case 5:
         _showUploadMenu();
+        render();
         break;
     }
   } else if (_state == STATE_UPLOAD) {
     _uploadFile(index);
+    render();
   }
 }
 
@@ -285,11 +289,6 @@ void GPSScreen::_wardStatusCb(TFT_eSprite& sp, int barY, int width, void* userDa
 
 void GPSScreen::_renderWardriver() {
   _lastRender = millis();
-
-  // Show waiting message if no stations found yet
-  if (_wardLog.count() == 0 && _gps.discoveredCount() == 0 && _gps.bleDiscoveredCount() == 0) {
-    _wardLog.addLine("Waiting for stations...", TFT_DARKGREY);
-  }
 
   // Poll recent finds and add to log
   GPSModule::FoundEntry finds[10];
@@ -438,11 +437,28 @@ void GPSScreen::_showUploadMenu() {
     for (uint8_t i = 0; i < count && _fileCount < MAX_FILES; i++) {
       if (!entries[i].isDir && entries[i].name.endsWith(".csv")) {
         _fileNames[_fileCount] = entries[i].name;
-        bool uploaded = entries[i].name.endsWith("_uploaded.csv");
-        _uploadItems[_fileCount] = {_fileNames[_fileCount].c_str(), uploaded ? "Uploaded" : nullptr};
         _fileCount++;
       }
     }
+  }
+
+  // Sort by filename (ascending)
+  for (uint8_t i = 1; i < _fileCount; i++) {
+    for (uint8_t j = i; j > 0 && _fileNames[j] < _fileNames[j - 1]; j--) {
+      String tmp = _fileNames[j];
+      _fileNames[j] = _fileNames[j - 1];
+      _fileNames[j - 1] = tmp;
+    }
+  }
+
+  // Build display labels and list items
+  for (uint8_t i = 0; i < _fileCount; i++) {
+    bool uploaded = _fileNames[i].endsWith("_uploaded.csv");
+    if (uploaded)
+      _fileLabels[i] = _fileNames[i].substring(0, _fileNames[i].length() - 13); // strip _uploaded.csv
+    else
+      _fileLabels[i] = _fileNames[i].substring(0, _fileNames[i].length() - 4);  // strip .csv
+    _uploadItems[i] = {_fileLabels[i].c_str(), uploaded ? "Uploaded" : nullptr};
   }
 
   if (_fileCount == 0) {
