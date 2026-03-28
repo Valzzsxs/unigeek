@@ -266,13 +266,13 @@ void GPSScreen::_wardStatusCb(TFT_eSprite& sp, int barY, int width, void* userDa
   sp.setTextColor(TFT_GREEN);
 
   float dist = self->_gps.totalDistance();
-  String distStr = dist >= 1000
-    ? String(dist / 1000.0, 1) + "km"
-    : String((int)dist) + "m";
-
-  String left = "W:" + String(self->_gps.discoveredCount()) +
-                " B:" + String(self->_gps.bleDiscoveredCount()) +
-                " " + distStr;
+  char left[40];
+  if (dist >= 1000)
+    snprintf(left, sizeof(left), "W:%u B:%u %.1fkm",
+             self->_gps.discoveredCount(), self->_gps.bleDiscoveredCount(), dist / 1000.0f);
+  else
+    snprintf(left, sizeof(left), "W:%u B:%u %dm",
+             self->_gps.discoveredCount(), self->_gps.bleDiscoveredCount(), (int)dist);
   sp.drawString(left, 2, barY);
 
   sp.setTextDatum(TR_DATUM);
@@ -297,19 +297,17 @@ void GPSScreen::_renderWardriver() {
   if (count > 0 && _wardLog.count() == 1 && _gps.discoveredCount() + _gps.bleDiscoveredCount() <= count) {
     _wardLog.clear();
   }
+  unsigned long secs = _gps.wardriveRuntime() / 1000;
+  char timeBuf[9];
+  snprintf(timeBuf, sizeof(timeBuf), "%02lu:%02lu:%02lu", secs / 3600, (secs / 60) % 60, secs % 60);
   for (uint8_t i = 0; i < count; i++) {
     auto& f = finds[i];
-    unsigned long rt = _gps.wardriveRuntime();
-    unsigned long secs = rt / 1000;
-    char timeBuf[9];
-    snprintf(timeBuf, sizeof(timeBuf), "%02lu:%02lu:%02lu", secs / 3600, (secs / 60) % 60, secs % 60);
-    String line;
-    if (f.isBle) {
-      line = String("[+] ") + timeBuf + " [BLE] " + f.name + " " + f.addr;
-    } else {
-      line = String("[+] ") + timeBuf + " " + f.name + " " + f.addr;
-    }
-    _wardLog.addLine(line.c_str(), f.isBle ? TFT_CYAN : TFT_WHITE);
+    char line[60];
+    if (f.isBle)
+      snprintf(line, sizeof(line), "[+] %s [BLE] %s %s", timeBuf, f.name, f.addr);
+    else
+      snprintf(line, sizeof(line), "[+] %s %s %s", timeBuf, f.name, f.addr);
+    _wardLog.addLine(line, f.isBle ? TFT_CYAN : TFT_WHITE);
   }
 
   _wardLog.draw(Uni.Lcd, bodyX(), bodyY(), bodyW(), bodyH(), _wardStatusCb, this);
@@ -317,10 +315,11 @@ void GPSScreen::_renderWardriver() {
 
 // Simple JSON value extractor — finds "key":value or "key":"value"
 static String _jsonVal(const String& json, const char* key) {
-  String search = "\"" + String(key) + "\":";
+  char search[64];
+  snprintf(search, sizeof(search), "\"%s\":", key);
   int pos = json.indexOf(search);
   if (pos < 0) return "";
-  pos += search.length();
+  pos += strlen(search);
   while (pos < (int)json.length() && json[pos] == ' ') pos++;
   if (json[pos] == '"') {
     int end = json.indexOf('"', pos + 1);
@@ -342,8 +341,13 @@ static String _wigleGet(WiFiClientSecure& client, const String& token, const Str
   unsigned long timeout = millis() + 10000;
   while (!client.available() && millis() < timeout) delay(50);
 
-  String response = "";
-  while (client.available()) response += (char)client.read();
+  String response;
+  response.reserve(2048);
+  while (client.available()) {
+    char tmp[256];
+    int n = client.read((uint8_t*)tmp, sizeof(tmp) - 1);
+    if (n > 0) { tmp[n] = '\0'; response += tmp; }
+  }
 
   // Extract body after \r\n\r\n
   int bodyStart = response.indexOf("\r\n\r\n");
@@ -579,8 +583,13 @@ void GPSScreen::_uploadFile(uint8_t fileIndex) {
   unsigned long timeout = millis() + 15000;
   while (!client.available() && millis() < timeout) delay(50);
 
-  String response = "";
-  while (client.available()) response += (char)client.read();
+  String response;
+  response.reserve(1024);
+  while (client.available()) {
+    char tmp[256];
+    int n = client.read((uint8_t*)tmp, sizeof(tmp) - 1);
+    if (n > 0) { tmp[n] = '\0'; response += tmp; }
+  }
   client.stop();
 
   if (response.indexOf("\"success\":true") >= 0 || response.indexOf("200") >= 0) {

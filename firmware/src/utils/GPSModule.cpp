@@ -152,17 +152,23 @@ void GPSModule::update() {
 }
 
 String GPSModule::_pad(int val, int width) {
-  String s = String(val);
-  while ((int)s.length() < width) s = "0" + s;
-  return s;
+  char buf[8];
+  snprintf(buf, sizeof(buf), "%0*d", width, val);
+  return {buf};
 }
 
 String GPSModule::getCurrentDate() {
-  return String(gps.date.year()) + "-" + _pad(gps.date.month(), 2) + "-" + _pad(gps.date.day(), 2);
+  char buf[12];
+  snprintf(buf, sizeof(buf), "%04d-%02d-%02d",
+           gps.date.year(), gps.date.month(), gps.date.day());
+  return {buf};
 }
 
 String GPSModule::getCurrentTime() {
-  return _pad(gps.time.hour(), 2) + ":" + _pad(gps.time.minute(), 2) + ":" + _pad(gps.time.second(), 2);
+  char buf[9];
+  snprintf(buf, sizeof(buf), "%02d:%02d:%02d",
+           gps.time.hour(), gps.time.minute(), gps.time.second());
+  return {buf};
 }
 
 bool GPSModule::_isWifiScanned(const uint8_t* bssid) {
@@ -197,26 +203,40 @@ void GPSModule::_addWigleRecord(IStorage* storage, const String& ssid, const Str
   if (!f) return;
 
   bool isWifi = strcmp(type, "WIFI") == 0;
-  String freqStr = isWifi
-    ? String(channel != 14 ? 2407 + (channel * 5) : 2484)
-    : "";
-  String altStr = String((int)gps.altitude.meters());
-  String accStr = String(gps.hdop.hdop() * 5.0, 1); // hdop * ~5m base accuracy
+  int freq = isWifi ? (channel != 14 ? 2407 + (channel * 5) : 2484) : 0;
+  int alt = (int)gps.altitude.meters();
+  float acc = gps.hdop.hdop() * 5.0f;
 
-  f.println(
-    bssid + "," +
-    "\"" + ssid + "\"," +
-    authMode + "," +
-    getCurrentDate() + " " + getCurrentTime() + "," +
-    String(channel) + "," +
-    freqStr + "," +
-    String(rssi) + "," +
-    String(gps.location.lat(), 6) + "," +
-    String(gps.location.lng(), 6) + "," +
-    altStr + "," +
-    accStr + "," +
-    ",," + type
-  );
+  // date/time
+  char dt[20];
+  snprintf(dt, sizeof(dt), "%04d-%02d-%02d %02d:%02d:%02d",
+           gps.date.year(), gps.date.month(), gps.date.day(),
+           gps.time.hour(), gps.time.minute(), gps.time.second());
+
+  // Write CSV line directly — no String temporaries
+  f.print(bssid);
+  f.print(",\"");
+  f.print(ssid);
+  f.print("\",");
+  f.print(authMode);
+  f.print(',');
+  f.print(dt);
+  f.print(',');
+  f.print(channel);
+  f.print(',');
+  if (isWifi) f.print(freq);
+  f.print(',');
+  f.print(rssi);
+  f.print(',');
+  f.print(gps.location.lat(), 6);
+  f.print(',');
+  f.print(gps.location.lng(), 6);
+  f.print(',');
+  f.print(alt);
+  f.print(',');
+  f.print(acc, 1);
+  f.print(",,,");
+  f.println(type);
   f.close();
 }
 
