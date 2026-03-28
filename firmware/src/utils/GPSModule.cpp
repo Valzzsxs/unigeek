@@ -6,7 +6,7 @@
 #include <WiFi.h>
 #include <esp_wifi.h>
 #include <math.h>
-#ifdef DEVICE_T_LORA_PAGER
+#ifdef BOARD_HAS_PSRAM
 #include <BLEDevice.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
@@ -82,7 +82,7 @@ static void promiscCb(void* buf, wifi_promiscuous_pkt_type_t type) {
 
 // === BLE scanning task (T-Lora Pager only — Bluedroid needs extra heap) ===
 
-#ifdef DEVICE_T_LORA_PAGER
+#ifdef BOARD_HAS_PSRAM
 static volatile bool s_bleRunning = false;
 static volatile bool s_bleTaskDone = false;
 
@@ -316,7 +316,7 @@ void GPSModule::_stopPromiscuous() {
 // === BLE scan control ===
 
 void GPSModule::_startBleScan() {
-#ifdef DEVICE_T_LORA_PAGER
+#ifdef BOARD_HAS_PSRAM
   s_bleRunning = true;
   s_bleTaskDone = false;
   xTaskCreatePinnedToCore(bleTaskFunc, "ble_wd", 8192, nullptr, 1, &_bleTask, 0);
@@ -324,7 +324,7 @@ void GPSModule::_startBleScan() {
 }
 
 void GPSModule::_stopBleScan() {
-#ifdef DEVICE_T_LORA_PAGER
+#ifdef BOARD_HAS_PSRAM
   if (!_bleTask) return;
   s_bleRunning = false;
   unsigned long start = millis();
