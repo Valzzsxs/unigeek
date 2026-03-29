@@ -5,6 +5,7 @@
 #include "ui/actions/ShowStatusAction.h"
 
 static constexpr uint16_t MAX_LINES = 500;
+static constexpr uint32_t MAX_FILE_SIZE = 32768; // 32KB max to prevent OOM restart
 static constexpr uint8_t LINE_HEIGHT = 10;
 static constexpr uint8_t FONT = 1;
 
@@ -21,9 +22,30 @@ void FileViewerScreen::onInit() {
     return;
   }
 
+  fs::File f = Uni.Storage->open(_path.c_str(), "r");
+  if (!f) {
+    ShowStatusAction::show("Cannot open file");
+    _goBack();
+    return;
+  }
+  size_t fileSize = f.size();
+  f.close();
+
+  if (fileSize == 0) {
+    ShowStatusAction::show("Empty file");
+    _goBack();
+    return;
+  }
+
+  if (fileSize > MAX_FILE_SIZE) {
+    ShowStatusAction::show("File too large (>32KB)");
+    _goBack();
+    return;
+  }
+
   _content = Uni.Storage->readFile(_path.c_str());
   if (_content.length() == 0) {
-    ShowStatusAction::show("Empty file");
+    ShowStatusAction::show("Failed to read file");
     _goBack();
     return;
   }
