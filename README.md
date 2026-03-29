@@ -210,11 +210,4 @@ firmware/
 - nr24lf
 - cc1101
 - infrared
-- upon gettig in to file viewer it's flickering
-- file manager should sort directory first then sort name asending
-- eapol brute force restart upon testing __test__ on 106++
-- log view and scroll list view should be on template instead of component
-- use log view on eapol capture
-- add attack counter and max attempt on eapol capture
-- add interval configuration for hopping channel and attack interval and wait on different list before it start
-- on gps walking mode, add channel number on status so user know which channel that program listening 
+- change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
