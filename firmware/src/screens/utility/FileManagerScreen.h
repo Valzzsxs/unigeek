@@ -5,6 +5,9 @@
 class FileManagerScreen : public ListScreen
 {
 public:
+  FileManagerScreen() = default;
+  FileManagerScreen(const String& startPath) : _curPath(startPath) {}
+
   const char* title() override { return _titleBuf; }
 
   void onInit() override;

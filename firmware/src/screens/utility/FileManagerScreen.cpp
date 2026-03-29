@@ -2,6 +2,7 @@
 #include "core/Device.h"
 #include "core/ScreenManager.h"
 #include "screens/utility/UtilityMenuScreen.h"
+#include "screens/utility/FileViewerScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
 
@@ -14,7 +15,7 @@ void FileManagerScreen::onInit()
     Screen.setScreen(new UtilityMenuScreen());
     return;
   }
-  _loadDir("/");
+  _loadDir(_curPath);
 }
 
 void FileManagerScreen::onUpdate()
@@ -56,8 +57,12 @@ void FileManagerScreen::onBack()
 void FileManagerScreen::onItemSelected(uint8_t index)
 {
   if (_state == STATE_FILE) {
-    if (index < _fileCount && _fileIsDir[index]) {
-      _loadDir(_filePath[index]);
+    if (index < _fileCount) {
+      if (_fileIsDir[index]) {
+        _loadDir(_filePath[index]);
+      } else {
+        Screen.setScreen(new FileViewerScreen(_filePath[index]));
+      }
     }
   } else if (_state == STATE_MENU) {
     _handleMenuAction(index);
