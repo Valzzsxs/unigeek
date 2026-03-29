@@ -103,6 +103,11 @@ void FileManagerScreen::_openMenu(uint8_t fileIdx)
 
   bool isFile = !_fileIsDir[fileIdx];
 
+  if (isFile) {
+    _menuActions[_menuCount] = ACT_VIEW;
+    _menuItems[_menuCount++] = {"View"};
+  }
+
   _menuActions[_menuCount] = ACT_NEW_FOLDER;
   _menuItems[_menuCount++] = {"New Folder"};
 
@@ -151,6 +156,10 @@ void FileManagerScreen::_handleMenuAction(uint8_t index)
   String targetName = _fileName[_menuSelIdx];
 
   switch (_menuActions[index]) {
+
+    case ACT_VIEW:
+      Screen.setScreen(new FileViewerScreen(targetPath));
+      return;
 
     case ACT_NEW_FOLDER: {
       String name = InputTextAction::popup("New Folder");
