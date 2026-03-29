@@ -41,7 +41,7 @@ static const char* const kTestPasswords[] = {
   "14141414",  "12345679",  "11111112",   "01020304",  "02468024",
   "13572468",  "10203040",  "11235813",   "31415926",  "27182818",
 };
-static constexpr int kTestPasswordCount = 125;
+static constexpr int kTestPasswordCount = sizeof(kTestPasswords) / sizeof(kTestPasswords[0]);
 
 // ── Statics ───────────────────────────────────────────────────────────────
 
