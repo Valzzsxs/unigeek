@@ -44,7 +44,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **Beacon Spam** — Flood the area with fake SSIDs
 - **CIW Zeroclick** — Broadcast SSIDs with injection payloads to test how nearby devices handle untrusted network names
 - **ESPNOW Chat** — Peer-to-peer text chat over ESP-NOW (no router needed)
-- **EAPOL Capture** — Capture WPA2 handshakes from nearby networks and save to storage; configurable discovery dwell, attack dwell, and max deauth attempts before starting ([details](knowledge/eapol.md))
+- **EAPOL Capture** — Capture WPA2 handshakes from nearby networks and save to storage; configurable discovery dwell, attack dwell, channel hopping, and max deauth attempts ([details](knowledge/eapol.md))
 - **EAPOL Brute Force** — Crack WPA2 passwords offline from captured handshakes; includes built-in 110-password test wordlist ([details](knowledge/eapol.md))
 
 ### Bluetooth
@@ -70,6 +70,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
   - Color-coded feedback: green = correct position, orange = wrong position, red = not in code
   - 4 difficulty levels: Easy (14 attempts, 3 min), Medium (7 attempts, 90 sec), Hard (unlimited, 3 min), Extreme (unlimited, 90 sec)
   - Keyboard devices type directly; non-keyboard devices cycle characters with UP/DOWN and use the `<` erase option
+- **Flappy Bird** — Classic side-scrolling game with randomized pipes and scoring
 - **Wordle** — Classic word-guessing game in English and Indonesian
   - Guess a 5-letter word in up to 10 attempts
   - Color-coded feedback: green = correct position, orange = wrong position, red = not in word
@@ -211,3 +212,5 @@ firmware/
 - cc1101
 - infrared
 - change keyboard to HID instead, mode will be USB and BLE, while BLE and USB only have Keyboard, Mouse and Jiggle Mouse, USB has 1 more option is Mass Storage.
+
+<!-- README last synced at commit: 6dc4338 -->
