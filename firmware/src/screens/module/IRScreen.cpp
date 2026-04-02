@@ -482,6 +482,7 @@ void IRScreen::_tvbProgressCb(uint8_t current, uint8_t total) {
 
 bool IRScreen::_tvbCancelCb() {
   if (!_activeInstance) return true;
+  Uni.update();
   if (Uni.Nav->wasPressed()) {
     auto dir = Uni.Nav->readDirection();
     if (dir == INavigation::DIR_BACK || dir == INavigation::DIR_PRESS) {
