@@ -39,6 +39,22 @@
 
 #define PIN_CONFIG_IR_RX_DEFAULT      "-1"
 
+// ─── CC1101 pin config ──────────────────────────────────────────────────────
+#define PIN_CONFIG_CC1101_CS        "cc1101_cs"
+#define PIN_CONFIG_CC1101_GDO0      "cc1101_gdo0"
+
+#ifdef CC1101_CS_PIN
+  #define PIN_CONFIG_CC1101_CS_DEFAULT   String(CC1101_CS_PIN)
+#else
+  #define PIN_CONFIG_CC1101_CS_DEFAULT   "-1"
+#endif
+
+#ifdef CC1101_GDO0_PIN
+  #define PIN_CONFIG_CC1101_GDO0_DEFAULT String(CC1101_GDO0_PIN)
+#else
+  #define PIN_CONFIG_CC1101_GDO0_DEFAULT "-1"
+#endif
+
 // ─── GPS pin config ─────────────────────────────────────────────────────────
 #define PIN_CONFIG_GPS_TX           "gps_tx"
 #define PIN_CONFIG_GPS_RX           "gps_rx"
