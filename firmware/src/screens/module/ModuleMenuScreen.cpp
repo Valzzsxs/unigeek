@@ -4,6 +4,7 @@
 #include "screens/module/MFRC522Screen.h"
 #include "screens/module/GPSScreen.h"
 #include "screens/module/IRScreen.h"
+#include "screens/module/SubGHzScreen.h"
 
 void ModuleMenuScreen::onInit() {
   setItems(_items);
@@ -18,5 +19,6 @@ void ModuleMenuScreen::onItemSelected(uint8_t index) {
     case 0: Screen.setScreen(new MFRC522Screen()); break;
     case 1: Screen.setScreen(new GPSScreen()); break;
     case 2: Screen.setScreen(new IRScreen()); break;
+    case 3: Screen.setScreen(new SubGHzScreen()); break;
   }
 }
