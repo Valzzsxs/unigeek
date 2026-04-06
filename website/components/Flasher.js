@@ -100,7 +100,6 @@ const Flasher = ({ board }) => {
         reportProgress: (fileIndex, written, total) => {
           const pct = Math.round((written / total) * 100);
           setProgress(pct);
-          if (pct % 10 === 0) writeLine(`  ${pct}%`);
         },
       });
 
