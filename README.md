@@ -52,6 +52,7 @@ Multi-tool firmware for ESP32-based handheld devices. Built with PlatformIO + Ar
 - **BLE Analyzer** — Scan nearby BLE devices, display name, address, and signal strength
 - **BLE Spam** — Spam BLE advertisement packets
 - **BLE Detector** — Passive BLE scanner that detects Flipper Zero devices, credit card skimmers, Apple AirTags/FindMy trackers, BitChat app users, and BLE spam attacks ([details](knowledge/ble-detector.md))
+- **WhisperPair** — Tests Google Fast Pair devices for CVE-2025-36911; performs an ECDH key exchange and forged KBP handshake to detect unauthorized pairing vulnerability ([details](knowledge/whisperpair.md))
 
 ### Keyboard (HID)
 - **BLE Keyboard** — Act as a wireless Bluetooth HID keyboard (all devices)
@@ -239,9 +240,11 @@ This project was built with inspiration and reference from:
 - [Bruce](https://github.com/pr3y/Bruce) by pr3y
   - All boards configuration and pin definitions
   - IR Remote (receive, send, TV-B-Gone with WORLD_IR_CODES database)
-  - Sub-GHz frequency list, RSSI threshold, and CC1101 wiring for M5StickC (shared SPI/UART bus on GPIO 32/33)
+  - Sub-GHz CC1101 frequency list, RSSI threshold, and CC1101 wiring for M5StickC (shared SPI/UART bus on GPIO 32/33)
 - [Flipper-IRDB](https://github.com/Flipper-XFW/Flipper-IRDB) by Flipper-XFW
   - Infrared remote database (46 categories, 2000+ IR remote files)
+- [FrostedFastPair](https://github.com/pivotchip/FrostedFastPair) by PivotChip
+  - WhisperPair (CVE-2025-36911): Fast Pair KBP vulnerability tester (ECDH + AES-128-ECB handshake exploit)
 - [LilyGoLib](https://github.com/Xinyuan-LilyGO/LilyGoLib) — Hardware reference for LilyGO T-Lora Pager
 - [M5Unified](https://github.com/m5stack/M5Unified) — Hardware reference for M5Stack devices (speaker, display, power)
 

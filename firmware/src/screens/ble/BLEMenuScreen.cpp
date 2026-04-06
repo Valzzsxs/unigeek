@@ -5,6 +5,7 @@
 #include "screens/ble/BLEAnalyzerScreen.h"
 #include "screens/ble/BLESpamScreen.h"
 #include "screens/ble/BLEDetectorScreen.h"
+#include "screens/ble/WhisperPairScreen.h"
 
 void BLEMenuScreen::onInit()
 {
@@ -15,8 +16,9 @@ void BLEMenuScreen::onItemSelected(uint8_t index)
 {
   switch (index) {
     case 0: Screen.setScreen(new BLEAnalyzerScreen());  break;
-    case 1: Screen.setScreen(new BLESpamScreen());     break;
-    case 2: Screen.setScreen(new BLEDetectorScreen()); break;
+    case 1: Screen.setScreen(new BLESpamScreen());      break;
+    case 2: Screen.setScreen(new BLEDetectorScreen());  break;
+    case 3: Screen.setScreen(new WhisperPairScreen());  break;
   }
 }
 
