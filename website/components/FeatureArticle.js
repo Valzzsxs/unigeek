@@ -1,8 +1,6 @@
-"use client";
 import PageBanner from "@/components/PageBanner";
-import { MDXRemote } from "next-mdx-remote";
 
-const FeatureArticle = ({ title, category, slug, mdxSource }) => {
+const FeatureArticle = ({ title, category, slug, html }) => {
   return (
     <>
       <PageBanner
@@ -24,9 +22,10 @@ const FeatureArticle = ({ title, category, slug, mdxSource }) => {
           >
             {category}
           </div>
-          <div className="single-post-text">
-            <MDXRemote {...mdxSource} />
-          </div>
+          <div
+            className="single-post-text"
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
           <div className="clear" />
         </div>
       </div>

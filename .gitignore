@@ -6,8 +6,8 @@ firmware/.pio
 
 # web
 website/node_modules
-website/package-lock.json
 website/build
+website/.next
 
 # lsp
 .cache

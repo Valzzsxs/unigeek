@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { marked } from "marked";
 
 const releasesDir = path.join(process.cwd(), "../release-notes");
 
@@ -12,7 +13,8 @@ export function getAllReleases() {
     .map((filename) => {
       const version = filename.replace(".md", "");
       const content = fs.readFileSync(path.join(releasesDir, filename), "utf8");
-      return { version, content };
+      const html = marked.parse(content);
+      return { version, html };
     })
     .sort((a, b) => {
       // Sort descending: newest first

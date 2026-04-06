@@ -1,5 +1,6 @@
 import fs from "fs";
 import path from "path";
+import { marked } from "marked";
 import { CATALOG } from "./catalog";
 
 const knowledgeDir = path.join(process.cwd(), "../knowledge");
@@ -18,5 +19,6 @@ export function getFeatureBySlug(slug) {
   // Strip the first H1 line — title comes from catalog
   const raw = fs.readFileSync(filePath, "utf8");
   const content = raw.replace(/^#\s+.+\n/, "");
-  return { ...entry, content };
+  const html = marked.parse(content);
+  return { ...entry, html };
 }

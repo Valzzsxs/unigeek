@@ -1,5 +1,4 @@
 "use client";
-import { MDXRemote } from "next-mdx-remote";
 import { useState } from "react";
 
 const ReleaseList = ({ releases }) => {
@@ -8,7 +7,7 @@ const ReleaseList = ({ releases }) => {
   return (
     <div className="section blog">
       <div className="content">
-        {releases.map(({ version, mdxSource }) => (
+        {releases.map(({ version, html }) => (
           <div
             key={version}
             style={{ borderBottom: "1px solid #2a2a2a", marginBottom: 0 }}
@@ -73,9 +72,8 @@ const ReleaseList = ({ releases }) => {
               <div
                 className="single-post-text"
                 style={{ paddingBottom: 32 }}
-              >
-                <MDXRemote {...mdxSource} />
-              </div>
+                dangerouslySetInnerHTML={{ __html: html }}
+              />
             )}
           </div>
         ))}
