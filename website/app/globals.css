@@ -50,13 +50,17 @@
 }
 .single-post-text code {
   background: #1a1a1a;
-  padding: 2px 5px;
+  padding: 2px 4px;
   border-radius: 3px;
   font-size: 0.9em;
 }
+.single-post-text pre code {
+  padding: 0;
+}
 .single-post-text ul,
 .single-post-text ol {
-  padding-left: 1.5em;
+  list-style: auto;
+  padding-left: 2.5em;
   margin: 0.75em 0;
 }
 .single-post-text table {
