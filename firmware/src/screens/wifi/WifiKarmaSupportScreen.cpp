@@ -59,6 +59,30 @@ void WifiKarmaSupportScreen::onUpdate()
     }
   }
 
+  // ── Pending command (deferred from recv callback — no WiFi ops in callback) ─
+  if (_pendingCmd != CMD_NONE) {
+    PendingCmd cmd = (PendingCmd)_pendingCmd;
+    _pendingCmd = CMD_NONE;
+    switch (cmd) {
+      case CMD_DEPLOY:
+        _stopAP();
+        _deployAP(_currentSsid, _pendingPass);
+        _sendAck(_pendingMac, true);
+        break;
+      case CMD_TEARDOWN:
+        _stopAP();
+        _supportState = STATE_WAITING_DEPLOY;
+        break;
+      case CMD_DONE:
+        _stopAP();
+        _supportState = STATE_WAITING_CONNECTION;
+        _sendHello();
+        _helloTimer = millis();
+        break;
+      default: break;
+    }
+  }
+
   unsigned long now = millis();
 
   if (now - _helloTimer > 2000) {
@@ -146,20 +170,18 @@ void WifiKarmaSupportScreen::_onRecv(const uint8_t* mac, const uint8_t* data, in
   switch (msg->cmd) {
     case KARMA_DEPLOY:
       memcpy(_attackerMac, mac, 6);
+      memcpy(_pendingMac, mac, 6);
       strncpy(_currentSsid, msg->ssid, 32);
       _currentSsid[32] = '\0';
-      _deployAP(msg->ssid, msg->password);
-      _sendAck(mac, true);
+      strncpy(_pendingPass, msg->password, 63);
+      _pendingPass[63] = '\0';
+      _pendingCmd = CMD_DEPLOY;
       break;
     case KARMA_TEARDOWN:
-      _stopAP();
-      _supportState = STATE_WAITING_DEPLOY;
+      _pendingCmd = CMD_TEARDOWN;
       break;
     case KARMA_DONE:
-      _stopAP();
-      _supportState = STATE_WAITING_CONNECTION;
-      _sendHello();
-      _helloTimer = millis();
+      _pendingCmd = CMD_DONE;
       break;
     default: break;
   }
@@ -209,7 +231,8 @@ void WifiKarmaSupportScreen::_deployAP(const char* ssid, const char* pass)
 void WifiKarmaSupportScreen::_stopAP()
 {
   if (!_apActive) return;
-  WiFi.softAPdisconnect(true);
-  _apActive     = false;
-  _apDeployTime = 0;
+  WiFi.softAPdisconnect(false);  // false = keep AP interface up (avoids mode demotion to WIFI_STA)
+  _apActive          = false;
+  _apDeployTime      = 0;
+  _wifiModeUpgraded  = false;    // force mode re-check on next deploy
 }

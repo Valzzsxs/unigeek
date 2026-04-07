@@ -26,6 +26,12 @@ private:
   unsigned long _helloTimer      = 0;
   unsigned long _lastDraw        = 0;
 
+  // Pending command (set in recv callback, executed in onUpdate — no WiFi ops in callback)
+  enum PendingCmd : uint8_t { CMD_NONE = 0, CMD_DEPLOY, CMD_TEARDOWN, CMD_DONE };
+  volatile PendingCmd _pendingCmd = CMD_NONE;
+  char          _pendingPass[64] = {};
+  uint8_t       _pendingMac[6]   = {};
+
   static WifiKarmaSupportScreen* _instance;
   static const uint8_t           _broadcast[6];
 
