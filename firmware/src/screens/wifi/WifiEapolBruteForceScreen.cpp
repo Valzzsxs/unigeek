@@ -247,8 +247,6 @@ void WifiEapolBruteForceScreen::onItemSelected(uint8_t index) {
     } else {
       strncpy(_selectedPcap, _filePaths[index].c_str(), sizeof(_selectedPcap) - 1);
       _selectedPcap[sizeof(_selectedPcap) - 1] = '\0';
-      Serial.printf("[EAPOL] selected index=%d path='%s' (len=%d)\n",
-                    index, _selectedPcap, strlen(_selectedPcap));
       _showMenu();
     }
     return;
@@ -323,8 +321,6 @@ bool WifiEapolBruteForceScreen::_listFiles(const char* ext) {
       _fileLabels[_fileCount] = e.base;
       _filePaths[_fileCount]  = String(dir) + "/" + e.base;
       _fileItems[_fileCount]  = {_fileLabels[_fileCount].c_str(), isPcap ? "PCAP" : nullptr};
-      Serial.printf("[EAPOL] listed[%d] label='%s' path='%s'\n",
-                    _fileCount, _fileLabels[_fileCount].c_str(), _filePaths[_fileCount].c_str());
       _fileCount++;
     }
   }
