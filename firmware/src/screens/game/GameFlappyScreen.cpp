@@ -8,10 +8,15 @@
 static constexpr float kGravity   = 0.35f;
 static constexpr float kFlapForce = -3.2f;
 static constexpr uint8_t kGroundH = 6;
+static constexpr const char* kHsFile = "/unigeek/games/flappy_hs.txt";
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────
 
-void GameFlappyScreen::onInit() { render(); }
+void GameFlappyScreen::onInit()
+{
+  _loadHighScores();
+  render();
+}
 
 void GameFlappyScreen::onUpdate()
 {
@@ -36,15 +41,18 @@ void GameFlappyScreen::onUpdate()
 
   if (_state == STATE_MENU) {
     switch (dir) {
-      case INavigation::DIR_UP:   _menuIdx = (_menuIdx - 1 + 2) % 2; render(); break;
-      case INavigation::DIR_DOWN: _menuIdx = (_menuIdx + 1) % 2;     render(); break;
+      case INavigation::DIR_UP:   _menuIdx = (_menuIdx - 1 + kMenuItems) % kMenuItems; render(); break;
+      case INavigation::DIR_DOWN: _menuIdx = (_menuIdx + 1) % kMenuItems;              render(); break;
       case INavigation::DIR_PRESS:
-        if (_menuIdx == 0) _initGame();
-        else               Screen.setScreen(new GameMenuScreen());
+        if (_menuIdx == 0)      _initGame();
+        else if (_menuIdx == 1) { _state = STATE_HIGH_SCORES; render(); }
+        else                    Screen.setScreen(new GameMenuScreen());
         break;
       case INavigation::DIR_BACK: Screen.setScreen(new GameMenuScreen()); break;
       default: break;
     }
+  } else if (_state == STATE_HIGH_SCORES) {
+    if (dir != INavigation::DIR_NONE) { _state = STATE_MENU; render(); }
   } else if (_state == STATE_PLAY) {
     if (dir == INavigation::DIR_PRESS || dir == INavigation::DIR_UP) _flap();
     else if (dir == INavigation::DIR_BACK) { _state = STATE_MENU; render(); }
@@ -57,9 +65,10 @@ void GameFlappyScreen::onUpdate()
 
 void GameFlappyScreen::onRender()
 {
-  if      (_state == STATE_MENU)   _renderMenu();
-  else if (_state == STATE_PLAY)   _renderPlay();
-  else                             _renderResult();
+  if      (_state == STATE_MENU)         _renderMenu();
+  else if (_state == STATE_PLAY)         _renderPlay();
+  else if (_state == STATE_HIGH_SCORES)  _renderHighScores();
+  else                                   _renderResult();
 }
 
 // ── Game Logic ──────────────────────────────────────────────────────────────
@@ -140,6 +149,8 @@ void GameFlappyScreen::_updateGame()
   if (_checkCollision()) {
     _lastScore = _score;
     if (_score > _bestScore) _bestScore = _score;
+    _isNewHigh = false;
+    _saveHighScore();
     if (Uni.Speaker) Uni.Speaker->playLose();
     ShowStatusAction::show("Game Over!", 1000);
     _state     = STATE_RESULT;
@@ -178,24 +189,31 @@ void GameFlappyScreen::_renderMenu()
   sp.createSprite(bodyW(), bodyH());
   sp.fillSprite(TFT_BLACK);
 
-  const char* items[2] = {"Play", "Exit"};
+  static constexpr const char* items[kMenuItems] = {"Play", "High Scores", "Exit"};
   sp.setTextSize(2);
   const int lineH  = sp.fontHeight() + 6;
-  const int startY = (bodyH() - 2 * lineH) / 2 - 10;
+  const int startY = (bodyH() - kMenuItems * lineH) / 2 - 8;
 
-  for (int i = 0; i < 2; i++) {
+  for (int i = 0; i < kMenuItems; i++) {
     sp.setTextColor((i == _menuIdx) ? Config.getThemeColor() : TFT_WHITE, TFT_BLACK);
     sp.setTextDatum(MC_DATUM);
     sp.drawString(items[i], bodyW() / 2, startY + i * lineH + lineH / 2);
   }
 
-  // Scores
-  if (_bestScore > 0) {
-    char buf[24];
-    sp.setTextSize(1);
+  // Last / best hint
+  sp.setTextSize(1);
+  sp.setTextDatum(BC_DATUM);
+  char buf[24];
+  if (_lastScore > 0 && _bestScore > 0) {
     sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
-    sp.setTextDatum(BC_DATUM);
-    snprintf(buf, sizeof(buf), "Last: %d  Best: %d", _lastScore, _bestScore);
+    snprintf(buf, sizeof(buf), "Last: %d", _lastScore);
+    sp.drawString(buf, bodyW() / 2, bodyH() - 12);
+    sp.setTextColor(_lastScore == _bestScore ? TFT_YELLOW : TFT_DARKGREY, TFT_BLACK);
+    snprintf(buf, sizeof(buf), "Best: %d", _bestScore);
+    sp.drawString(buf, bodyW() / 2, bodyH() - 2);
+  } else if (_bestScore > 0) {
+    sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    snprintf(buf, sizeof(buf), "Best: %d", _bestScore);
     sp.drawString(buf, bodyW() / 2, bodyH() - 2);
   }
 
@@ -274,12 +292,104 @@ void GameFlappyScreen::_renderResult()
   sp.setTextColor(TFT_WHITE, TFT_BLACK);
   snprintf(buf, sizeof(buf), "Score: %d", _score);
   sp.drawString(buf, bodyW() / 2, bodyH() / 2);
-  snprintf(buf, sizeof(buf), "Best: %d", _bestScore);
-  sp.drawString(buf, bodyW() / 2, bodyH() / 2 + 14);
+
+  if (_isNewHigh) {
+    sp.setTextColor(TFT_YELLOW, TFT_BLACK);
+    sp.drawString("NEW HIGH!", bodyW() / 2, bodyH() / 2 + 14);
+  } else {
+    sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+    snprintf(buf, sizeof(buf), "Best: %d", _bestScore);
+    sp.drawString(buf, bodyW() / 2, bodyH() / 2 + 14);
+  }
 
   sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
   sp.setTextDatum(BC_DATUM);
   sp.drawString("Press to continue", bodyW() / 2, bodyH());
+
+  sp.pushSprite(bodyX(), bodyY());
+  sp.deleteSprite();
+}
+
+// ── High Score Storage ───────────────────────────────────────────────────────
+
+void GameFlappyScreen::_loadHighScores()
+{
+  memset(_topScores, 0, sizeof(_topScores));
+  if (!Uni.Storage || !Uni.Storage->exists(kHsFile)) return;
+  String data = Uni.Storage->readFile(kHsFile);
+  int pos = 0;
+  for (uint8_t i = 0; i < kTopN; i++) {
+    int nl = data.indexOf('\n', pos);
+    if (nl < 0) break;
+    _topScores[i] = data.substring(pos, nl).toInt();
+    pos = nl + 1;
+  }
+  _bestScore = _topScores[0];
+}
+
+void GameFlappyScreen::_saveHighScore()
+{
+  // Check if score belongs in top N
+  if (_score <= 0) return;
+  bool entered = false;
+  for (uint8_t i = 0; i < kTopN; i++) {
+    if (_score > _topScores[i]) {
+      // Shift down
+      for (uint8_t j = kTopN - 1; j > i; j--)
+        _topScores[j] = _topScores[j - 1];
+      _topScores[i] = _score;
+      _isNewHigh    = true;
+      entered       = true;
+      break;
+    }
+  }
+  if (!entered) return;
+
+  _bestScore = _topScores[0];
+
+  if (!Uni.Storage) return;
+  String data;
+  for (uint8_t i = 0; i < kTopN; i++) {
+    data += String(_topScores[i]);
+    data += '\n';
+  }
+  Uni.Storage->makeDir("/unigeek/games");
+  Uni.Storage->writeFile(kHsFile, data.c_str());
+}
+
+void GameFlappyScreen::_renderHighScores()
+{
+  TFT_eSprite sp(&Uni.Lcd);
+  sp.createSprite(bodyW(), bodyH());
+  sp.fillSprite(TFT_BLACK);
+
+  sp.setTextSize(1);
+  sp.setTextDatum(TC_DATUM);
+  sp.setTextColor(Config.getThemeColor(), TFT_BLACK);
+  sp.drawString("Top Scores", bodyW() / 2, 2);
+
+  const int lineH  = 14;
+  const int startY = 18;
+  char buf[16];
+  for (uint8_t i = 0; i < kTopN; i++) {
+    uint16_t col = (i == 0) ? TFT_YELLOW : TFT_WHITE;
+    if (_topScores[i] == 0) col = TFT_DARKGREY;
+    sp.setTextColor(col, TFT_BLACK);
+    sp.setTextDatum(TL_DATUM);
+    snprintf(buf, sizeof(buf), "#%u", i + 1);
+    sp.drawString(buf, 8, startY + i * lineH);
+    sp.setTextDatum(TR_DATUM);
+    if (_topScores[i] > 0)
+      snprintf(buf, sizeof(buf), "%d", _topScores[i]);
+    else
+      snprintf(buf, sizeof(buf), "--");
+    sp.drawString(buf, bodyW() - 8, startY + i * lineH);
+  }
+
+  sp.setTextSize(1);
+  sp.setTextColor(TFT_DARKGREY, TFT_BLACK);
+  sp.setTextDatum(BC_DATUM);
+  sp.drawString("Press to go back", bodyW() / 2, bodyH() - 1);
 
   sp.pushSprite(bodyX(), bodyY());
   sp.deleteSprite();

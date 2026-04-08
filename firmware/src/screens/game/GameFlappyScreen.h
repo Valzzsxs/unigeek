@@ -14,12 +14,14 @@ public:
   void onRender() override;
 
 private:
-  enum State { STATE_MENU, STATE_PLAY, STATE_RESULT } _state = STATE_MENU;
+  enum State { STATE_MENU, STATE_PLAY, STATE_RESULT, STATE_HIGH_SCORES } _state = STATE_MENU;
 
   static constexpr uint8_t kBirdW     = 8;
   static constexpr uint8_t kBirdH     = 6;
   static constexpr uint8_t kPipeW     = 12;
   static constexpr uint8_t kMaxPipes  = 4;
+  static constexpr uint8_t kTopN      = 5;
+  static constexpr uint8_t kMenuItems = 3;
 
   // Menu
   int8_t _menuIdx = 0;
@@ -41,8 +43,12 @@ private:
   int      _score      = 0;
   int      _lastScore  = 0;
   int      _bestScore  = 0;
+  bool     _isNewHigh  = false;
   uint32_t _lastFrameMs = 0;
   uint32_t _pipeTimer   = 0;
+
+  // High scores
+  int _topScores[kTopN] = {};
 
   // Derived from screen size
   uint8_t _gapH      = 0;
@@ -54,8 +60,11 @@ private:
   void _updateGame();
   bool _checkCollision();
   void _spawnPipe();
+  void _loadHighScores();
+  void _saveHighScore();
 
   void _renderMenu();
   void _renderPlay();
   void _renderResult();
+  void _renderHighScores();
 };
