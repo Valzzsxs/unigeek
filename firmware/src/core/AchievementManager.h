@@ -246,10 +246,10 @@ public:
   }
 
   // Draw toast overlay — called from BaseScreen::update() every frame
-  void drawToastIfNeeded() {
+  void drawToastIfNeeded(int bx, int by, int bw, int bh) {
     if (_toast[0] == '\0') return;
     if (millis() > _toastUntil) { _toast[0] = '\0'; return; }
-    _drawToast();
+    _drawToast(bx, by, bw, bh);
   }
 
   AchievementManager(const AchievementManager&)            = delete;
@@ -275,12 +275,12 @@ private:
     _toastUntil = millis() + 3000;
   }
 
-  void _drawToast() {
+  void _drawToast(int bx, int by, int bw, int bh) {
     auto& lcd = Uni.Lcd;
-    int tw = lcd.width() - 20;
     int th = 34;
-    int tx = 10;
-    int ty = lcd.height() - th - 4;
+    int tw = bw - 8;
+    int tx = bx + 4;
+    int ty = by + bh - th - 4;
 
     TFT_eSprite sp(&lcd);
     sp.createSprite(tw, th);

@@ -16,7 +16,7 @@ public:
 
   void update() override {
     onUpdate();
-    Achievement.drawToastIfNeeded();
+    Achievement.drawToastIfNeeded(bodyX(), bodyY(), bodyW(), bodyH());
     if (Uni.lcdOff) return;
     if (millis() - _lastStatusUpdate > 1000) {
       StatusBar::refresh();
