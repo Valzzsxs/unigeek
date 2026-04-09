@@ -5,6 +5,7 @@
 #include "core/ScreenManager.h"
 #include "core/ConfigManager.h"
 #include "core/PinConfigManager.h"
+#include "core/AchievementStorage.h"
 #include "core/RtcManager.h"
 #include "core/RandomSeed.h"
 
@@ -59,6 +60,7 @@ void setup() {
   _checkStorageFallback();
   Config.load(Uni.Storage);
   PinConfig.load(Uni.Storage);
+  AchStore.load(Uni.Storage);
 
   RandomSeed::init();
   Uni.applyNavMode();

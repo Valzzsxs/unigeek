@@ -1,23 +1,23 @@
 #pragma once
 #include <TFT_eSPI.h>
-#include "ConfigManager.h"
+#include "AchievementStorage.h"
 #include "Device.h"
 
 // ── AchievementManager ────────────────────────────────────────────────────────
 // Singleton. Owns the full achievement catalog + all runtime state.
-// Storage via ConfigManager (key=value at /unigeek/config):
+// Storage via AchievementStorage (key=value at /unigeek/achievements):
 //   ach_cnt_<id>   — integer counter / max value
 //   ach_done_<id>  — "1" when unlocked
 //   ach_exp_total  — cumulative EXP
 //
 // Hook pattern in screens:
-//   int n = Achievement.inc("ach_cnt_foo");
-//   if (n == 1)  Achievement.unlock("foo_id",  "Title",  100);
-//   if (n == 5)  Achievement.unlock("foo_id2", "Title2", 300);
+//   int n = Achievement.inc("wifi_first_scan");
+//   if (n == 1) Achievement.unlock("wifi_first_scan");   // title+EXP auto from catalog
+//   if (n == 5) Achievement.unlock("wifi_connect_5");
 //
-//   Achievement.setMax("ach_cnt_bar", currentValue);
-//   if (Achievement.getInt("ach_cnt_bar") >= 20)
-//     Achievement.unlock("bar_id", "Title", 600);
+//   Achievement.setMax("flappy_score_25", score);
+//   if (Achievement.getInt("flappy_score_25") >= 25)
+//     Achievement.unlock("flappy_score_25");
 
 class AchievementManager {
 public:
@@ -205,8 +205,8 @@ public:
   // Increment counter, persist, return new value
   int inc(const char* key) {
     int v = getInt(key) + 1;
-    Config.set(key, String(v));
-    if (Uni.Storage) Config.save(Uni.Storage);
+    AchStore.set(key, String(v));
+    if (Uni.Storage) AchStore.save(Uni.Storage);
     return v;
   }
 
@@ -214,37 +214,35 @@ public:
   int setMax(const char* key, int value) {
     int cur = getInt(key);
     if (value > cur) {
-      Config.set(key, String(value));
-      if (Uni.Storage) Config.save(Uni.Storage);
+      AchStore.set(key, String(value));
+      if (Uni.Storage) AchStore.save(Uni.Storage);
       return value;
     }
     return cur;
   }
 
-  // Unlock achievement — no-op if already done. Saves + shows toast.
-  void unlock(const char* id, const char* title, int exp) {
-    String doneKey = String("ach_done_") + id;
-    if (Config.get(doneKey) == "1") return;
-    Config.set(doneKey, "1");
-    int total = Config.get("ach_exp_total", "0").toInt() + exp;
-    Config.set("ach_exp_total", String(total));
-    if (Uni.Storage) Config.save(Uni.Storage);
-    strncpy(_toast, title, sizeof(_toast) - 1);
-    _toast[sizeof(_toast) - 1] = '\0';
-    _toastExp   = exp;
-    _toastUntil = millis() + 3000;
+  // Unlock achievement by id — looks up title and EXP from catalog automatically.
+  // No-op if already unlocked or id not found.
+  void unlock(const char* id) {
+    const AchDef* cat = catalog();
+    for (uint8_t i = 0; i < kAchCount; i++) {
+      if (strcmp(cat[i].id, id) == 0) {
+        _unlock(id, cat[i].title, tierExp(cat[i].tier));
+        return;
+      }
+    }
   }
 
   bool isUnlocked(const char* id) const {
-    return Config.get(String("ach_done_") + id) == "1";
+    return AchStore.get(String("ach_done_") + id) == "1";
   }
 
   int getInt(const char* key) const {
-    return Config.get(key, "0").toInt();
+    return AchStore.get(key, "0").toInt();
   }
 
   int getExp() const {
-    return Config.get("ach_exp_total", "0").toInt();
+    return AchStore.get("ach_exp_total", "0").toInt();
   }
 
   // Draw toast overlay — called from BaseScreen::update() every frame
@@ -263,6 +261,19 @@ private:
   char     _toast[32]  = {};
   int      _toastExp   = 0;
   uint32_t _toastUntil = 0;
+
+  void _unlock(const char* id, const char* title, int exp) {
+    String doneKey = String("ach_done_") + id;
+    if (AchStore.get(doneKey) == "1") return;
+    AchStore.set(doneKey, "1");
+    int total = AchStore.get("ach_exp_total", "0").toInt() + exp;
+    AchStore.set("ach_exp_total", String(total));
+    if (Uni.Storage) AchStore.save(Uni.Storage);
+    strncpy(_toast, title, sizeof(_toast) - 1);
+    _toast[sizeof(_toast) - 1] = '\0';
+    _toastExp   = exp;
+    _toastUntil = millis() + 3000;
+  }
 
   void _drawToast() {
     auto& lcd = Uni.Lcd;
