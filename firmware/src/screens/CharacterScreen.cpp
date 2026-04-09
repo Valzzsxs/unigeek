@@ -144,7 +144,8 @@ void CharacterScreen::onRender()
   if (hp == 0 && !chg) hp = 100;
   int      brain = ESP.getHeapSize() > 0
                  ? _clampPct((ESP.getFreeHeap() * 100) / ESP.getHeapSize()) : 0;
-  String   agent = Config.get(APP_CONFIG_DEVICE_NAME, APP_CONFIG_DEVICE_NAME_DEFAULT);
+  String   agent      = Config.get(APP_CONFIG_DEVICE_NAME, APP_CONFIG_DEVICE_NAME_DEFAULT);
+  String   agentTitle = Config.get(APP_CONFIG_AGENT_TITLE, APP_CONFIG_AGENT_TITLE_DEFAULT);
 
   int cx = PAD;
   int cy = PAD + 2;
@@ -161,6 +162,17 @@ void CharacterScreen::onRender()
   sp.setTextColor(rank.color);
   sp.drawString(rank.label, W - PAD, cy, 1);
   cy += lineH + gap;
+
+  // Agent title: [RANK] title  or  [RANK] No Title
+  {
+    char titleBuf[48];
+    const char* t = agentTitle.length() > 0 ? agentTitle.c_str() : "No Title";
+    snprintf(titleBuf, sizeof(titleBuf), "[%s] %s", rank.label, t);
+    sp.setTextDatum(TL_DATUM);
+    sp.setTextColor(rank.color);
+    sp.drawString(titleBuf, cx, cy, 1);
+    cy += lineH + gap;
+  }
 
   {
     char expBuf[12];

@@ -34,6 +34,8 @@
 #define APP_CONFIG_WIFI_AP_SSID_DEFAULT         "UniGeek"
 #define APP_CONFIG_WIFI_AP_PASSWORD             "wifi_ap_password"
 #define APP_CONFIG_WIFI_AP_PASSWORD_DEFAULT     ""
+#define APP_CONFIG_AGENT_TITLE                  "agent_title"
+#define APP_CONFIG_AGENT_TITLE_DEFAULT          ""
 
 class ConfigManager
 {

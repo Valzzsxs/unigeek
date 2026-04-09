@@ -31,7 +31,7 @@ public:
   };
 
   static constexpr uint8_t kDomainCount = 11;
-  static constexpr uint8_t kAchCount    = 122;
+  static constexpr uint8_t kAchCount    = 129;
 
   // Returns the full catalog array (122 entries)
   static const AchDef* catalog() {
