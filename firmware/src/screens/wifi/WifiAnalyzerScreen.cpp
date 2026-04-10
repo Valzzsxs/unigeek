@@ -1,6 +1,7 @@
 #include "WifiAnalyzerScreen.h"
 #include "core/Device.h"
 #include "core/ScreenManager.h"
+#include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "ui/actions/ShowStatusAction.h"
 
@@ -90,6 +91,13 @@ void WifiAnalyzerScreen::_scan()
     }
   }
 
+  int na = Achievement.inc("wifi_analyzer_scan");
+  if (na == 1) Achievement.unlock("wifi_analyzer_scan");
+  if (total >= 20) {
+    int n20 = Achievement.inc("wifi_analyzer_20aps");
+    if (n20 == 1) Achievement.unlock("wifi_analyzer_20aps");
+  }
+
   _showScan();
 }
 
@@ -115,6 +123,9 @@ void WifiAnalyzerScreen::_showInfo(int index)
   _infoRows[2] = {"RSSI",       _entries[index].rssi};
   _infoRows[3] = {"Channel",    _entries[index].channel};
   _infoRows[4] = {"Encryption", _entries[index].encryption};
+
+  int nd = Achievement.inc("wifi_analyzer_detail");
+  if (nd == 1) Achievement.unlock("wifi_analyzer_detail");
 
   setItems(nullptr, 0);
   _scrollView.setRows(_infoRows, 5);

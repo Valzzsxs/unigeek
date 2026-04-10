@@ -1,6 +1,7 @@
 #include "IPScannerScreen.h"
 #include <WiFi.h>
 #include "core/ScreenManager.h"
+#include "core/AchievementManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputNumberAction.h"
 #include "ui/views/ProgressView.h"
@@ -84,6 +85,9 @@ void IPScannerScreen::_scanIP() {
     return;
   }
 
+  int nip = Achievement.inc("wifi_ip_scan_started");
+  if (nip == 1) Achievement.unlock("wifi_ip_scan_started");
+
   _foundCount = IpScanUtil::scan(
     (uint8_t)_startIp, (uint8_t)_endIp,
     _foundIPs, MAX_FOUND, true,
@@ -96,6 +100,9 @@ void IPScannerScreen::_scanIP() {
     setItems(_foundItems, 1);
     return;
   }
+
+  int nh = Achievement.inc("wifi_ip_host_found");
+  if (nh == 1) Achievement.unlock("wifi_ip_host_found");
 
   for (uint8_t i = 0; i < _foundCount; i++)
     _foundItems[i] = {_foundIPs[i].ip, _foundIPs[i].hostname};
@@ -110,6 +117,9 @@ void IPScannerScreen::_scanPort(const char* ip) {
   memset(_openPorts, 0, sizeof(_openPorts));
   memset(_openItems, 0, sizeof(_openItems));
 
+  int nps = Achievement.inc("wifi_port_scan_started");
+  if (nps == 1) Achievement.unlock("wifi_port_scan_started");
+
   _openCount = PortScanUtil::scan(ip, _openPorts, PortScanUtil::MAX_RESULTS);
 
   if (_openCount == 0) {
@@ -118,6 +128,9 @@ void IPScannerScreen::_scanPort(const char* ip) {
     setItems(_openItems, 1);
     return;
   }
+
+  int npo = Achievement.inc("wifi_port_open_found");
+  if (npo == 1) Achievement.unlock("wifi_port_open_found");
 
   for (uint8_t i = 0; i < _openCount; i++) {
     _openItems[i] = {_openPorts[i].label, _openPorts[i].service};

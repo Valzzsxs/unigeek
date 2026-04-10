@@ -1,5 +1,6 @@
 #include "PortScannerScreen.h"
 #include "core/ScreenManager.h"
+#include "core/AchievementManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -60,6 +61,9 @@ void PortScannerScreen::_scan() {
   memset(_results,     0, sizeof(_results));
   memset(_resultItems, 0, sizeof(_resultItems));
 
+  int nps = Achievement.inc("wifi_port_scan_started");
+  if (nps == 1) Achievement.unlock("wifi_port_scan_started");
+
   _resultCount = PortScanUtil::scan(_targetIp.c_str(), _results, PortScanUtil::MAX_RESULTS);
 
   if (_resultCount == 0) {
@@ -68,6 +72,9 @@ void PortScannerScreen::_scan() {
     setItems(_resultItems, 1);
     return;
   }
+
+  int npo = Achievement.inc("wifi_port_open_found");
+  if (npo == 1) Achievement.unlock("wifi_port_open_found");
 
   for (uint8_t i = 0; i < _resultCount; i++) {
     _resultItems[i] = {_results[i].label, _results[i].service};

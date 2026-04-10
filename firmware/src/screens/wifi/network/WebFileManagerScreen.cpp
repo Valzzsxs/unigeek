@@ -2,6 +2,7 @@
 #include "core/ScreenManager.h"
 #include "core/Device.h"
 #include "core/ConfigManager.h"
+#include "core/AchievementManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "ui/actions/InputTextAction.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -87,6 +88,8 @@ void WebFileManagerScreen::_start() {
     return;
   }
   _state = STATE_RUNNING;
+  int nw = Achievement.inc("wifi_wfm_started");
+  if (nw == 1) Achievement.unlock("wifi_wfm_started");
   _ipUrl   = "http://" + WiFi.localIP().toString() + ":8080/";
   _mdnsUrl = "http://unigeek.local:8080/";
   setItems(nullptr, 0);

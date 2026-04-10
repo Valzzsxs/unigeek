@@ -1,6 +1,7 @@
 #include "DownloadScreen.h"
 #include "core/ScreenManager.h"
 #include "core/Device.h"
+#include "core/AchievementManager.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
 #include "utils/network/WebFileManager.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -253,6 +254,12 @@ void DownloadScreen::_downloadSampleData() {
     }
   }
 
+  if (downloaded > 0) {
+    int nd = Achievement.inc("wifi_download_first");
+    if (nd == 1)  Achievement.unlock("wifi_download_first");
+    if (nd == 10) Achievement.unlock("wifi_download_10");
+  }
+
   String msg = String(downloaded) + " files downloaded";
   if (failed > 0) msg += "\n" + String(failed) + " failed";
   ShowStatusAction::show(msg.c_str(), 2000);
@@ -400,6 +407,11 @@ void DownloadScreen::_downloadIRCategory(uint8_t index) {
     } else {
       failed++;
     }
+  }
+
+  if (downloaded > 0) {
+    int nir = Achievement.inc("wifi_download_ir");
+    if (nir == 1) Achievement.unlock("wifi_download_ir");
   }
 
   String msg = String(downloaded) + " files downloaded";

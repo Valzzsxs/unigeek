@@ -4,6 +4,7 @@
 
 #include "WorldClockScreen.h"
 #include "screens/wifi/network/NetworkMenuScreen.h"
+#include "core/AchievementManager.h"
 #include "core/RtcManager.h"
 #include "core/RandomSeed.h"
 #include "ui/actions/ShowStatusAction.h"
@@ -58,6 +59,8 @@ void WorldClockScreen::onRender() {
 
   if (!_synced) {
     _synced = true;
+    int nw = Achievement.inc("wifi_world_clock");
+    if (nw == 1) Achievement.unlock("wifi_world_clock");
     time_t now;
     time(&now);
     struct timeval tv = { .tv_sec = now, .tv_usec = 0 };

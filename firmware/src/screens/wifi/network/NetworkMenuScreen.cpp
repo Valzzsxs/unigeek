@@ -4,6 +4,7 @@
 
 #include "NetworkMenuScreen.h"
 #include "core/ScreenManager.h"
+#include "core/AchievementManager.h"
 #include "screens/wifi/WifiMenuScreen.h"
 #include "screens/wifi/network/WorldClockScreen.h"
 #include "screens/wifi/network/IPScannerScreen.h"
@@ -86,6 +87,9 @@ void NetworkMenuScreen::_showWifiList() {
 
   _scannedCount = WifiUtility::scan(_scanned, WifiUtility::MAX_WIFI);
 
+  int ns = Achievement.inc("wifi_first_scan");
+  if (ns == 1) Achievement.unlock("wifi_first_scan");
+
   for (int i = 0; i < _scannedCount; i++) {
     _scannedItems[i] = { _scanned[i].label };
   }
@@ -101,6 +105,10 @@ void NetworkMenuScreen::_connectToSelected(uint8_t index) {
 
   if (result == WifiUtility::CONNECT_OK) {
     ShowStatusAction::show(("Connected to " + String(_scanned[index].ssid)).c_str(), 1500);
+    int nc = Achievement.inc("wifi_first_connect");
+    if (nc == 1)  Achievement.unlock("wifi_first_connect");
+    if (nc == 5)  Achievement.unlock("wifi_connect_5");
+    if (nc == 20) Achievement.unlock("wifi_connect_20");
     _showMenu();
   } else if (result == WifiUtility::CONNECT_CANCELLED) {
     render();
@@ -123,6 +131,8 @@ void NetworkMenuScreen::_showWifiQR() {
   content += ";;";
 
   ShowQRCodeAction::show(ssid.c_str(), content.c_str());
+  int nq = Achievement.inc("wifi_qr_shown");
+  if (nq == 1) Achievement.unlock("wifi_qr_shown");
   _showMenu();
 }
 
@@ -142,6 +152,8 @@ void NetworkMenuScreen::_showInformation() {
   _infoRows[9]  = {"MAC",      WiFi.macAddress()};
   _infoRows[10] = {"BSSID",    WiFi.BSSIDstr()};
 
+  int ni = Achievement.inc("wifi_info_viewed");
+  if (ni == 1) Achievement.unlock("wifi_info_viewed");
   _scrollView.setRows(_infoRows, 11);
   _scrollView.render(bodyX(), bodyY(), bodyW(), bodyH());
 }
