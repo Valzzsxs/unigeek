@@ -11,71 +11,172 @@ namespace {
 
 int _clampPct(int v) { return v < 0 ? 0 : v > 100 ? 100 : v; }
 
-// Bar whose label and value are drawn INSIDE the filled region.
-//   label  — left-aligned inside bar (e.g. "HP", "BRAIN")
-//   value  — right-aligned inside bar (e.g. "85%", "24/122")
-//   pct    — 0-100 fill level
-//   fillColor — colour for the filled portion
 void _drawInlineBar(TFT_eSprite& sp, int x, int y, int w, int h,
                     const char* label, const char* value,
                     int pct, uint16_t fillColor, int scale = 1)
 {
   const uint16_t kEmptyBg = 0x2104;
   pct = _clampPct(pct);
-
   sp.fillRect(x, y, w, h, kEmptyBg);
   sp.drawRect(x, y, w, h, TFT_DARKGREY);
-
   int fill = (w - 2) * pct / 100;
   if (fill > 0) sp.fillRect(x + 1, y + 1, fill, h - 2, fillColor);
-
-  // font 1 has 1 px dead row at the bottom — shift up by 1 to visually centre
   int ty = y + (h - scale * 8) / 2 + 1;
-
   sp.setTextDatum(TL_DATUM);
   sp.setTextColor(TFT_WHITE);
   sp.drawString(label, x + 5, ty, 1);
-
   sp.setTextDatum(TR_DATUM);
   sp.setTextColor(TFT_WHITE);
   sp.drawString(value, x + w - 5, ty, 1);
 }
 
-struct RankInfo { const char* label; uint16_t color; };
+struct RankInfo { const char* label; uint16_t color; int rank; };
 
-// Total possible EXP across all 129 catalog achievements = 45,200
-// Rank thresholds: NOVICE 0 | HACKER 4,500 (10%) | EXPERT 15,000 (33%)
-//                 ELITE 30,000 (66%) | LEGEND 43,000 (95%)
-RankInfo _getRank(int exp)
+RankInfo _getRankInfo(int exp)
 {
-  if (exp >= 43000) return { "LEGEND", TFT_VIOLET   };
-  if (exp >= 30000) return { "ELITE",  TFT_YELLOW   };
-  if (exp >= 15000) return { "EXPERT", TFT_CYAN     };
-  if (exp >= 4500)  return { "HACKER", TFT_GREEN    };
-                    return { "NOVICE", TFT_DARKGREY };
+  if (exp >= 43000) return { "LEGEND", TFT_VIOLET,   4 };
+  if (exp >= 30000) return { "ELITE",  TFT_YELLOW,   3 };
+  if (exp >= 15000) return { "EXPERT", TFT_CYAN,     2 };
+  if (exp >= 4500)  return { "HACKER", TFT_GREEN,    1 };
+                    return { "NOVICE", TFT_DARKGREY, 0 };
 }
 
-int _domainUnlocked(const AchievementManager::AchDef* cat, uint8_t domain)
+// ── Pixel-art hacker head ─────────────────────────────────────────────────────
+// Grid: 12 wide × 14 tall (art-pixels).  ps = screen pixels per art-pixel.
+// rank 0=NOVICE  1=HACKER  2=EXPERT  3=ELITE  4=LEGEND
+void _drawHackerHead(TFT_eSprite& sp, int ox, int oy, int ps, bool blink, int rank)
 {
-  int n = 0;
-  for (int i = 0; i < AchievementManager::kAchCount; i++)
-    if (cat[i].domain == domain && Achievement.isUnlocked(cat[i].id)) n++;
-  return n;
+  // Per-rank style table
+  struct HeadStyle { uint16_t hood; uint16_t eye; bool sunglasses; bool bigEyes; };
+  static constexpr HeadStyle kS[5] = {
+    { 0x630C, 0x7BEF, false, false },  // NOVICE  – gray hood, dull white eyes
+    { 0x4228, 0x07FF, false, false },  // HACKER  – dark gray, cyan eyes
+    { 0x198F, 0x07FF, true,  false },  // EXPERT  – dark blue, cyberpunk sunglasses
+    { 0x7240, 0xFFE0, false, true  },  // ELITE   – gold hood, large yellow eyes
+    { 0x2810, 0x780F, false, true  },  // LEGEND  – dark violet hood, big violet eyes
+  };
+
+  int ri = rank < 0 ? 0 : rank > 4 ? 4 : rank;
+  const HeadStyle& s = kS[ri];
+
+  const uint16_t H = s.hood;
+  const uint16_t F = 0xFDA0;   // face skin
+  const uint16_t E = s.eye;
+  const uint16_t M = 0x2104;   // mouth / eyelid dark
+  const uint16_t N = 0xEB60;   // nose
+
+  auto R = [&](int ax, int ay, int aw, int ah, uint16_t c) {
+    sp.fillRect(ox + ax * ps, oy + ay * ps, aw * ps, ah * ps, c);
+  };
+
+  // ── Hood background ──
+  R(2, 0, 8, 1, H);
+  R(1, 1, 10, 1, H);
+  R(0, 2, 12, 12, H);      // rows 2-13 full width
+
+  // ── Face (rows 3,12 narrow; rows 4-11 wide) ──
+  R(2, 3, 8, 1, F);
+  R(1, 4, 10, 8, F);
+  R(2, 12, 8, 1, F);
+
+  // ── NOVICE: straight eyebrows (basic/confused look) ──
+  if (rank == 0) {
+    R(2, 4, 2, 1, M);
+    R(8, 4, 2, 1, M);
+  }
+
+  // ── EXPERT: sunglasses (no blink — shades never come off) ──
+  if (s.sunglasses) {
+    R(1, 5, 10, 2, 0x0841);              // dark lens area
+    R(1, 4,  1, 1, M);                   // left frame corner
+    R(10, 4, 1, 1, M);                   // right frame corner
+    R(1, 4, 10, 1, M);                   // frame top bar
+    R(5, 5,  2, 2, 0x2945);              // nose bridge between lenses
+    // Tiny eye glow visible through tinted glass
+    sp.drawPixel(ox + 3 * ps, oy + 5 * ps, E);
+    sp.drawPixel(ox + 9 * ps, oy + 5 * ps, E);
+  } else {
+    int eyeW = s.bigEyes ? 3 : 2;
+    int eyeRx = 10 - eyeW;               // right-eye start col (mirror of 2)
+    if (!blink) {
+      R(2,     5, eyeW, 2, E);           // left eye
+      R(eyeRx, 5, eyeW, 2, E);           // right eye
+      if (!s.bigEyes) {
+        // specular dot top-left corner of each eye
+        sp.drawPixel(ox + 2    * ps, oy + 5 * ps, TFT_WHITE);
+        sp.drawPixel(ox + eyeRx * ps, oy + 5 * ps, TFT_WHITE);
+      } else if (rank == 4) {
+        // LEGEND: faint violet glow halo flanking eyes
+        sp.drawPixel(ox + 1       * ps, oy + 5 * ps, s.eye);
+        sp.drawPixel(ox + (eyeRx + eyeW) * ps, oy + 5 * ps, s.eye);
+      }
+    } else {
+      R(2,     6, eyeW, 1, M);           // left closed
+      R(eyeRx, 6, eyeW, 1, M);          // right closed
+    }
+  }
+
+  // ── Nose ──
+  R(5, 8, 1, 2, N);
+
+  // ── Mouth ──
+  if (rank == 0) {
+    // NOVICE: flat neutral line
+    R(3, 10, 6, 1, M);
+  } else if (rank >= 3) {
+    // ELITE / LEGEND: wider smirk + inner highlight
+    R(2, 10, 8, 1, M);
+    R(2, 11, 1, 1, M);
+    R(9, 11, 1, 1, M);
+  } else {
+    // HACKER / EXPERT: normal smile
+    R(3, 10, 6, 1, M);
+    R(3, 11, 1, 1, M);
+    R(8, 11, 1, 1, M);
+  }
 }
 
-int _domainTotal(const AchievementManager::AchDef* cat, uint8_t domain)
-{
-  int n = 0;
-  for (int i = 0; i < AchievementManager::kAchCount; i++)
-    if (cat[i].domain == domain) n++;
-  return n;
-}
+// ── Techy words for dialog bubble ────────────────────────────────────────────
+// Phrases are drawn from actual firmware features — keep each entry <= 16 chars
+// so it fits the bubble on a 240 px screen at scale=1.
+constexpr const char* kWords[] = {
+  // WiFi attacks
+  "DEAUTH SENT",    "EVIL TWIN ON",   "BEACON SPAM",
+  "EAPOL GRAB!",    "WPA2 CRACKED",   "KARMA ACTIVE",
+  "SSID CLONED",    "DNS SPOOF ON",   "MITM READY",
+  "STA KICKED",     "ROGUE AP UP",    "PMKID SNIFF",
+  "HANDSHAKE!",     "ARP POISON",     "DHCP STARVED",
+  // Network tools
+  "CCTV FOUND!",    "PORT 22 OPEN",   "IP SCAN DONE",
+  "ESP-NOW TX",     "WARDRIVE ON",    "WIGLE CSV OK",
+  // BLE
+  "BLE SPAM ON",    "AIRTAG NEAR!",   "SKIMMER DET",
+  "KBP EXPLOIT",    "CVE-2025-369",   "FLIPPER DET",
+  "FAST PAIR?",     "BLE CONN OK",
+  // HID / DuckyScript
+  "DUCKY RUN!",     "HID INJECT",     "USB HID ON",
+  "BLE KB LIVE",    "PAYLOAD SENT",   "SHELL OPEN",
+  // NFC
+  "MIFARE READ",    "KEY FOUND!",     "DARKSIDE ATK",
+  "NESTED ATK",     "NFC DUMP OK",    "SECTOR 0 OK",
+  "CARD CLONED",
+  // Sub-GHz
+  "433.92 MHz",     "CC1101 RDY",     "RF CAPTURE",
+  "SIGNAL LOCK",    "JAMMER ON",      "315 MHz TX",
+  // GPS
+  "GPS LOCK!",      "SAT: 8/12",      "LOG SAVED",
+  // IR
+  "TV-B-GONE",      "IR CAPTURE",     "NEC DECODED",
+  // Misc / system
+  "LittleFS OK",    "SD MOUNTED",     "I2C: 0x68",
+  "QR LOADED",      "OTA READY",      ">_HACKING",
+};
+constexpr int kWordCount = (int)(sizeof(kWords) / sizeof(kWords[0]));
 
 } // namespace
 
 // ─── CharacterScreen ─────────────────────────────────────────────────────────
 
-// Full-screen exception: skip BaseScreen chrome so we own every pixel.
 void CharacterScreen::update()
 {
   onUpdate();
@@ -91,6 +192,12 @@ void CharacterScreen::render()
 void CharacterScreen::onInit()
 {
   _lastRefreshMs = 0;
+  _lastAnimMs    = 0;
+  _lastCharMs    = 0;
+  _animFrame     = 0;
+  _wordIdx       = 0;
+  _wordPos       = 0;
+  _wordState     = 0;
 }
 
 void CharacterScreen::onUpdate()
@@ -103,11 +210,47 @@ void CharacterScreen::onUpdate()
     }
   }
 
-  unsigned long now = millis();
-  if (now - _lastRefreshMs > 2000) {
-    _lastRefreshMs = now;
-    render();
+  unsigned long now        = millis();
+  bool          needsRender = false;
+
+  // ── blink animation ──────────────────────────────────────────────────
+  if (_animFrame == 0) {
+    if (now - _lastAnimMs > 3500) { _animFrame = 1; _lastAnimMs = now; needsRender = true; }
+  } else {
+    if (now - _lastAnimMs > 150)  { _animFrame = 0; _lastAnimMs = now; needsRender = true; }
   }
+
+  // ── dialog bubble state machine ──────────────────────────────────────
+  // state 0 = TYPING:   add one char every 65 ms
+  // state 1 = PAUSING:  hold full word for 7 s then start deleting
+  // state 2 = DELETING: remove one char every 50 ms, then next word
+  const char* w    = kWords[_wordIdx % kWordCount];
+  int         wlen = (int)strlen(w);
+
+  if (_wordState == 0) {
+    if (_wordPos < (uint8_t)wlen) {
+      if (now - _lastCharMs > 65) { _wordPos++; _lastCharMs = now; needsRender = true; }
+    } else {
+      _wordState = 1; _lastCharMs = now;  // word done → enter pause
+    }
+  } else if (_wordState == 1) {
+    if (now - _lastCharMs > 7000) { _wordState = 2; _lastCharMs = now; needsRender = true; }
+  } else {  // _wordState == 2: deleting
+    if (_wordPos > 0) {
+      if (now - _lastCharMs > 50) { _wordPos--; _lastCharMs = now; needsRender = true; }
+    } else {
+      _wordIdx   = (uint8_t)((_wordIdx + 1) % kWordCount);
+      _wordPos   = 0;
+      _wordState = 0;
+      _lastCharMs = now;
+      needsRender = true;
+    }
+  }
+
+  // ── periodic data refresh (battery, heap) ────────────────────────────
+  if (now - _lastRefreshMs > 5000) { _lastRefreshMs = now; needsRender = true; }
+
+  if (needsRender) render();
 }
 
 void CharacterScreen::onRender()
@@ -121,44 +264,40 @@ void CharacterScreen::onRender()
   const int      PAD   = 4;
   const uint16_t theme = Config.getThemeColor();
 
-  // ── screen scale (base: Cardputer = 240 px wide) ──────────────────────────
-  // Always use font 1 + setTextSize(scale) — font 1 is always compiled in,
-  // unlike font 2/4 which require LOAD_FONT2/4 in User_Setup.h.
-  const int scale   = W < 360 ? 1 : W < 600 ? 2 : 3;
-  const int lineH   = scale * 8;
-  const int barH    = scale * 16;
-  const int domBarH = scale * 13;
-  const int gap     = scale * 2;   // single spacing unit — used everywhere
+  const int scale = W < 360 ? 1 : W < 600 ? 2 : 3;
+  const int lineH = scale * 8;
+  const int barH  = scale * 16;
+  const int gap   = scale * 2;
 
-  sp.setTextSize(scale);  // scale font 1 up for larger screens
+  sp.setTextSize(scale);
 
-  // ── collect data ──────────────────────────────────────────────────────────
-  const auto* cat    = AchievementManager::catalog();
-  const int   kTotal = (int)AchievementManager::kAchCount;
-
-  int numUnlk = 0;
-  for (int i = 0; i < kTotal; i++)
-    if (Achievement.isUnlocked(cat[i].id)) numUnlk++;
+  // ── collect data ──────────────────────────────────────────────────────
   int      exp   = Achievement.getExp();
-  RankInfo rank  = _getRank(exp);
+  RankInfo ri    = _getRankInfo(exp);
   int      hp    = _clampPct(Uni.Power.getBatteryPercentage());
   bool     chg   = Uni.Power.isCharging();
   if (hp == 0 && !chg) hp = 100;
   int      brain = ESP.getHeapSize() > 0
                  ? _clampPct((ESP.getFreeHeap() * 100) / ESP.getHeapSize()) : 0;
-  String   agent      = Config.get(APP_CONFIG_DEVICE_NAME, APP_CONFIG_DEVICE_NAME_DEFAULT);
-  String   agentTitle = Config.get(APP_CONFIG_AGENT_TITLE, APP_CONFIG_AGENT_TITLE_DEFAULT);
+  String agent      = Config.get(APP_CONFIG_DEVICE_NAME, APP_CONFIG_DEVICE_NAME_DEFAULT);
+  String agentTitle = Config.get(APP_CONFIG_AGENT_TITLE, APP_CONFIG_AGENT_TITLE_DEFAULT);
+
+  const auto* cat    = AchievementManager::catalog();
+  const int   kTotal = (int)AchievementManager::kAchCount;
+  int numUnlk = 0;
+  for (int i = 0; i < kTotal; i++)
+    if (Achievement.isUnlocked(cat[i].id)) numUnlk++;
 
   int cx = PAD;
   int cy = PAD + 2;
 
   const int indent = sp.textWidth("AGENT ", 1);
 
-  // ── SECTION 1: identity ───────────────────────────────────────────────────
+  // ── SECTION 1: identity ───────────────────────────────────────────────
   {
     const char* t = agentTitle.length() > 0 ? agentTitle.c_str() : "No Title";
     char rankTitleBuf[48];
-    snprintf(rankTitleBuf, sizeof(rankTitleBuf), "[%s] %s", rank.label, t);
+    snprintf(rankTitleBuf, sizeof(rankTitleBuf), "[%s] %s", ri.label, t);
 
     sp.setTextDatum(TL_DATUM);
     sp.setTextColor(TFT_DARKGREY);
@@ -166,7 +305,7 @@ void CharacterScreen::onRender()
     sp.setTextColor(TFT_WHITE);
     sp.drawString(agent.substring(0, 15).c_str(), cx + indent, cy, 1);
     sp.setTextDatum(TR_DATUM);
-    sp.setTextColor(rank.color);
+    sp.setTextColor(ri.color);
     sp.drawString(rankTitleBuf, W - PAD, cy, 1);
   }
   cy += lineH + gap;
@@ -187,78 +326,86 @@ void CharacterScreen::onRender()
     int rPct    = (exp >= 43000) ? 100
                 : _clampPct((exp - prevExp) * 100 / (nextExp - prevExp));
 
-    int bx     = W * 5 / 8;
-    int bw     = W - bx - PAD;
-    int rBarH  = scale * 6;
+    int bx    = W * 5 / 8;
+    int bw    = W - bx - PAD;
+    int rBarH = scale * 6;
     sp.drawRect(bx, cy + scale, bw, rBarH, TFT_DARKGREY);
     int fill = (bw - 2) * rPct / 100;
     if (fill > 0) sp.fillRect(bx + 1, cy + scale + 1, fill, rBarH - 2, theme);
   }
   cy += lineH + gap;
 
-  // ── SECTION 2: vitals ─────────────────────────────────────────────────────
-  const int halfW = (W - PAD * 2 - gap) / 2;  // two bars + gap
+  // ── SECTION 2: vitals — pinned to bottom, 1 px gap from edge ─────────
+  const int sec2H = barH * 2 + gap;
+  const int sec2Y = H - 1 - sec2H;
+  const int halfW = (W - PAD * 2 - gap) / 2;
 
-  // Row 1: HP | BRAIN side by side
   char hpBuf[8];
   snprintf(hpBuf, sizeof(hpBuf), "%d%%", hp);
-  _drawInlineBar(sp, cx, cy, halfW, barH,
+  _drawInlineBar(sp, cx, sec2Y, halfW, barH,
                  chg ? "HP +CHG" : "HP", hpBuf, hp, TFT_RED, scale);
 
   char brainBuf[8];
   snprintf(brainBuf, sizeof(brainBuf), "%d%%", brain);
-  _drawInlineBar(sp, cx + halfW + gap, cy, halfW, barH,
+  _drawInlineBar(sp, cx + halfW + gap, sec2Y, halfW, barH,
                  "BRAIN", brainBuf, brain, TFT_DARKGREEN, scale);
-  cy += barH + gap;
 
-  // Row 2: ACHIEVEMENT full-width
   char achBuf[16];
   int achPct = kTotal > 0 ? (numUnlk * 100 / kTotal) : 0;
   snprintf(achBuf, sizeof(achBuf), "%d/%d", numUnlk, kTotal);
-  _drawInlineBar(sp, cx, cy, W - PAD * 2, barH,
+  _drawInlineBar(sp, cx, sec2Y + barH + gap, W - PAD * 2, barH,
                  "ACHIEVEMENT", achBuf, achPct, TFT_ORANGE, scale);
-  cy += barH + gap;
 
-  // ── SECTION 3: domain inline bars (4 cols × 2 rows) ──────────────────────
-  struct DomEntry { const char* abbr; uint8_t dom; uint16_t col; };
-  const DomEntry kDoms[8] = {
-    { "WiFi", 0, TFT_CYAN    },
-    { "Atk",  1, TFT_RED     },
-    { "BT",   2, TFT_BLUE    },
-    { "HID",  3, TFT_YELLOW  },
-    { "NFC",  4, TFT_GREEN   },
-    { "IR",   5, TFT_ORANGE  },
-    { "RF",   6, TFT_MAGENTA },
-    { "GPS",  7, TFT_WHITE   },
-  };
-  const int kCols    = 4;
-  const int domBarW  = (W - PAD * 2 - (kCols - 1) * gap) / kCols;
-  const int domStep  = domBarW + gap;
+  // ── MIDDLE: idle hacker head + dialog bubble ──────────────────────────
+  const int midY = cy;
+  const int midH = sec2Y - cy;
 
-  for (int i = 0; i < 8; i++) {
-    int col = i % kCols;
-    int row = i / kCols;
-    int dx  = cx + col * domStep;
-    int dy  = cy + row * (domBarH + gap);
+  const int ps    = (W < 360) ? 3 : (W < 600) ? 6 : 9;
+  const int headW = 12 * ps;
+  const int headH = 14 * ps;
+  const int headX = PAD + scale * 4;
+  const int headY = midH > headH ? (midY + (midH - headH) / 2) : midY;
 
-    int tot = _domainTotal(cat, kDoms[i].dom);
-    int unl = _domainUnlocked(cat, kDoms[i].dom);
-    int pct = (tot > 0) ? (unl * 100 / tot) : 0;
+  _drawHackerHead(sp, headX, headY, ps, _animFrame == 1, ri.rank);
 
-    // last column stretches to W-PAD so right edge aligns with section 2
-    int bw = (col == kCols - 1) ? (W - PAD - dx) : domBarW;
-    _drawInlineBar(sp, dx, dy, bw, domBarH, kDoms[i].abbr, "", pct, kDoms[i].col, scale);
+  // Dialog bubble (tail points left toward head)
+  const int bubX = headX + headW + gap * 3;
+  const int bubW = W - bubX - PAD;
+  const int bubH = lineH + gap * 4;
+  const int bubY = headY + headH / 2 - bubH / 2;
+
+  if (bubW > lineH * 2) {
+    const uint16_t bubBg = 0x0841;
+    const uint16_t bubFg = TFT_GREEN;
+
+    // Tail: filled triangle pointing left
+    const int tailW = gap * 3;
+    for (int i = 0; i < tailW; i++) {
+      int spread = i + 1;
+      sp.drawFastVLine(bubX - tailW + i, bubY + bubH / 2 - spread, spread * 2, bubBg);
+    }
+
+    sp.fillRect(bubX, bubY, bubW, bubH, bubBg);
+    sp.drawRect(bubX, bubY, bubW, bubH, bubFg);
+
+    // Build partial word string + cursor
+    const char* word  = kWords[_wordIdx % kWordCount];
+    int         wlen  = (int)strlen(word);
+    int         shown = (_wordPos <= (uint8_t)wlen) ? (int)_wordPos : wlen;
+    char buf[36] = {};
+    if (shown > 0) strncpy(buf, word, shown);
+    // Show cursor while typing or pausing; hide while deleting (erase effect)
+    if (_wordState != 2 || shown < wlen) {
+      buf[shown]     = '_';
+      buf[shown + 1] = '\0';
+    } else {
+      buf[shown] = '\0';
+    }
+
+    sp.setTextDatum(ML_DATUM);
+    sp.setTextColor(bubFg);
+    sp.drawString(buf, bubX + gap * 2, bubY + bubH / 2, 1);
   }
-  cy += domBarH * 2 + gap + gap;
-
-  // ── footer ────────────────────────────────────────────────────────────────
-  sp.setTextDatum(BC_DATUM);
-  sp.setTextColor(TFT_DARKGREY);
-#ifdef DEVICE_HAS_KEYBOARD
-  sp.drawString("ENTER / BACK: Main Menu", W / 2, H - 2, 1);
-#else
-  sp.drawString("Press: Main Menu", W / 2, H - 2, 1);
-#endif
 
   sp.pushSprite(0, 0);
   sp.deleteSprite();

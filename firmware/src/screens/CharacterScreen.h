@@ -18,5 +18,15 @@ public:
 private:
   unsigned long _lastRefreshMs = 0;
 
+  // idle animation
+  uint8_t       _animFrame   = 0;       // 0=normal, 1=blink
+  unsigned long _lastAnimMs  = 0;
+
+  // dialog bubble typing  (0=typing, 1=pausing, 2=deleting)
+  uint8_t       _wordIdx     = 0;
+  uint8_t       _wordPos     = 0;
+  uint8_t       _wordState   = 0;
+  unsigned long _lastCharMs  = 0;
+
   void _enterMainMenu();
 };
