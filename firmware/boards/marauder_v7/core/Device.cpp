@@ -10,7 +10,7 @@ static NavigationImpl navigation;
 static PowerImpl      power;
 static StorageSD      storageSD;
 static StorageLFS     storageLFS;
-static ExtSpiClass    sdSpi(HSPI);  // shares display bus (SCK=18, MISO=19, MOSI=23)
+static ExtSpiClass    sdSpi(HSPI);  // dedicated SD SPI bus (SCK=14, MISO=12, MOSI=13)
 
 void Device::applyNavMode() {}
 void Device::boardHook() {}
@@ -19,12 +19,12 @@ Device* Device::createInstance() {
   pinMode(LCD_BL, OUTPUT);
   digitalWrite(LCD_BL, HIGH);
 
-  pinMode(SD_CS, OUTPUT);
-  digitalWrite(SD_CS, HIGH);
+  pinMode(SDCARD_CS, OUTPUT);
+  digitalWrite(SDCARD_CS, HIGH);
 
-  sdSpi.begin(SPI_SCK_PIN, SPI_MISO_PIN, SPI_MOSI_PIN, -1);
+  sdSpi.begin(SDCARD_SCK, SDCARD_MISO, SDCARD_MOSI, -1);
   storageLFS.begin();
-  storageSD.begin(SD_CS, sdSpi);
+  storageSD.begin(SDCARD_CS, sdSpi);
 
   auto* dev = new Device(display, power, &navigation, nullptr,
                          &storageSD, &storageLFS, &sdSpi, nullptr);

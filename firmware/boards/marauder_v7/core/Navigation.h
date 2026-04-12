@@ -1,7 +1,7 @@
 //
-// WiFi Marauder v7 — 5 buttons: SEL (34), UP (36), DOWN (35), RIGHT (39), LEFT/BACK (13).
+// WiFi Marauder v7 — 5 buttons: SEL (34), UP (36), DOWN (35), RIGHT (39), LEFT/BACK (26).
 // All active LOW. GPIOs 34/35/36/39 are ESP32 input-only with no internal pull-up — use INPUT.
-// GPIO 13 (BTN_LEFT) has an internal pull-up but hardware provides external; also use INPUT.
+// GPIO 26 (BTN_LEFT) has an internal pull-up but hardware provides external; also use INPUT.
 //
 
 #pragma once
