@@ -54,13 +54,6 @@ jobs:
           PLATFORMIO_BUILD_SRC_FLAGS: -DFIRMWARE_VERSION='"${{ github.ref_name }}"'
         run: pio run -e ${{ matrix.env }}
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: firmware-${{ matrix.env }}
-          path: unigeek-${{ matrix.env }}.bin
-          retention-days: 7
-
       - name: Upload to release
         uses: softprops/action-gh-release@v2
         env:
