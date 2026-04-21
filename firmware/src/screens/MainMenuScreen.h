@@ -38,14 +38,13 @@ private:
   GridItem _items[ITEM_COUNT];
 
   uint8_t _selectedIndex = 0;
-  uint8_t _scrollOffset = 0; // The row offset
 
-  uint8_t _cols = 1;
-  uint8_t _rows = 1;
-  uint8_t _visibleRows = 1;
-
-  void _calculateLayout();
-  void _scrollIfNeeded();
   bool _hasBackItem();
   uint8_t _effectiveCount();
+
+  void _animateTransition(uint8_t fromIdx, uint8_t toIdx, int dir);
+  void _renderFrame(uint8_t fromIdx, uint8_t toIdx, float progress, int dir);
+  void _drawItem(TFT_eSprite& sprite, uint8_t idx, int16_t offsetY);
+
+  static void _drawBackIcon(TFT_eSPI& lcd, int16_t x, int16_t y, bool active);
 };
